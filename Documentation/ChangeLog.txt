@@ -1,0 +1,6 @@
+# Revision Notes
+
+---
+v0.0.1 - 03/07/2026 - AR
+- OTA method update
+- Requires firmware with an MCU bootloader to perform the update

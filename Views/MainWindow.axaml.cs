@@ -30,25 +30,26 @@ public partial class MainWindow : Window
 {
     private const int MaxLogLines = 700;
     private const int MaxWatchdogSeconds = 3600;
-    private const double LargeGearStepDegrees = 7;
+    private const double DrivenGearMeshPhaseDegrees = 15;
+    private const double DrivenGearToothCount = 12;
+    private const double GearDriveStepDegrees = 7;
+    private const double LargeGearCenter = 27;
     private const double LargeGearToothCount = 16;
-    private const double MediumGearMeshPhaseDegrees = 15;
-    private const double MediumGearToothCount = 12;
+    private const double MediumGearCenter = 21;
     private const double ProgressPulseStep = 18;
-    private const double SmallGearMeshPhaseDegrees = 18;
-    private const double SmallGearToothCount = 10;
+    private const double SmallGearCenter = 17;
 
     private readonly DispatcherTimer boardAddressReloadTimer;
     private readonly StringBuilder debugText = new();
-    private readonly RotateTransform hiddenLargeGearTransform = new();
-    private readonly RotateTransform hiddenMediumGearTransform = new();
+    private readonly RotateTransform hiddenLargeGearTransform = new() { CenterX = LargeGearCenter, CenterY = LargeGearCenter };
+    private readonly RotateTransform hiddenMediumGearTransform = new() { CenterX = MediumGearCenter, CenterY = MediumGearCenter };
     private readonly TranslateTransform hiddenProgressPulseTransform = new() { X = -140 };
-    private readonly RotateTransform hiddenSmallGearTransform = new();
-    private readonly RotateTransform progressLargeGearTransform = new();
-    private readonly RotateTransform progressMediumGearTransform = new();
+    private readonly RotateTransform hiddenSmallGearTransform = new() { CenterX = SmallGearCenter, CenterY = SmallGearCenter };
+    private readonly RotateTransform progressLargeGearTransform = new() { CenterX = LargeGearCenter, CenterY = LargeGearCenter };
+    private readonly RotateTransform progressMediumGearTransform = new() { CenterX = MediumGearCenter, CenterY = MediumGearCenter };
     private readonly DispatcherTimer progressAnimationTimer;
     private readonly TranslateTransform progressPulseTransform = new() { X = -140 };
-    private readonly RotateTransform progressSmallGearTransform = new();
+    private readonly RotateTransform progressSmallGearTransform = new() { CenterX = SmallGearCenter, CenterY = SmallGearCenter };
     private readonly DispatcherTimer updateClockTimer;
 
     private FileSystemWatcher? boardAddressWatcher;
@@ -462,6 +463,8 @@ public partial class MainWindow : Window
         HiddenSmallGear.RenderTransform = hiddenSmallGearTransform;
         ProgressPulse.RenderTransform = progressPulseTransform;
         HiddenProgressPulse.RenderTransform = hiddenProgressPulseTransform;
+        ProgressSmallGear.IsVisible = false;
+        HiddenSmallGear.IsVisible = false;
     }
 
     private void SetProgressAnimation(bool isActive)
@@ -490,7 +493,7 @@ public partial class MainWindow : Window
 
     private void AnimateProgressVisuals()
     {
-        gearAngle = (gearAngle + LargeGearStepDegrees) % 360;
+        gearAngle = (gearAngle + GearDriveStepDegrees) % 360;
 
         var trackWidth = Math.Max(ProgressPulseHost.Bounds.Width, HiddenProgressPulseHost.Bounds.Width);
         if (trackWidth <= 0)
@@ -512,18 +515,23 @@ public partial class MainWindow : Window
 
     private void ApplyProgressAnimationTransforms()
     {
-        var largeGearAngle = gearAngle;
-        var mediumGearAngle = NormalizeAngle(MediumGearMeshPhaseDegrees - largeGearAngle * LargeGearToothCount / MediumGearToothCount);
-        var smallGearAngle = NormalizeAngle(SmallGearMeshPhaseDegrees + largeGearAngle * LargeGearToothCount / SmallGearToothCount);
+        var driverAngle = NormalizeAngle(gearAngle);
+        var drivenAngle = GetMeshedDrivenAngle(driverAngle);
 
-        progressLargeGearTransform.Angle = largeGearAngle;
-        hiddenLargeGearTransform.Angle = largeGearAngle;
-        progressMediumGearTransform.Angle = mediumGearAngle;
-        hiddenMediumGearTransform.Angle = mediumGearAngle;
-        progressSmallGearTransform.Angle = smallGearAngle;
-        hiddenSmallGearTransform.Angle = smallGearAngle;
+        progressLargeGearTransform.Angle = driverAngle;
+        hiddenLargeGearTransform.Angle = driverAngle;
+        progressMediumGearTransform.Angle = drivenAngle;
+        hiddenMediumGearTransform.Angle = drivenAngle;
+        progressSmallGearTransform.Angle = drivenAngle;
+        hiddenSmallGearTransform.Angle = drivenAngle;
         progressPulseTransform.X = progressPulseOffset;
         hiddenProgressPulseTransform.X = progressPulseOffset;
+    }
+
+    private static double GetMeshedDrivenAngle(double driverAngle)
+    {
+        var drivenRatio = LargeGearToothCount / DrivenGearToothCount;
+        return NormalizeAngle(DrivenGearMeshPhaseDegrees - driverAngle * drivenRatio);
     }
 
     private static double NormalizeAngle(double angle)
