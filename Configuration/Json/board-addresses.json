@@ -1,0 +1,74 @@
+[
+  {
+    "Name": "ACP_ADDRESS_BROADCAST",
+    "Address": "0x00"
+  },
+  {
+    "Name": "ACP_ADDRESS_HWM",
+    "Address": "0x11"
+  },
+  {
+    "Name": "ACP_ADDRESS_CMB",
+    "Address": "0x31"
+  },
+  {
+    "Name": "ACP_ADDRESS_PMB",
+    "Address": "0x41"
+  },
+  {
+    "Name": "ACP_ADDRESS_WMB",
+    "Address": "0x42"
+  },
+  {
+    "Name": "ACP_ADDRESS_WAFER_PMB",
+    "Address": "0x43"
+  },
+  {
+    "Name": "ACP_ADDRESS_DCB",
+    "Address": "0x51"
+  },
+  {
+    "Name": "ACP_ADDRESS_WAFER_DCB",
+    "Address": "0x52"
+  },
+  {
+    "Name": "ACP_ADDRESS_WAFER_DDB",
+    "Address": "0x53"
+  },
+  {
+    "Name": "ACP_ADDRESS_FCB",
+    "Address": "0x61"
+  },
+  {
+    "Name": "ACP_ADDRESS_PEMB",
+    "Address": "0x70"
+  },
+  {
+    "Name": "ACP_ADDRESS_TEMB",
+    "Address": "0x71"
+  },
+  {
+    "Name": "ACP_ADDRESS_BEMB",
+    "Address": "0x72"
+  },
+  {
+    "Name": "ACP_ADDRESS_EEMB",
+    "Address": "0x73"
+  },
+  {
+    "Name": "ACP_ADDRESS_PSB",
+    "Address": "0x81"
+  },
+  {
+    "Name": "ACP_ADDRESS_PFEB",
+    "Address": "0x91"
+  },
+  {
+    "Name": "ACP_ADDRESS_PMU",
+    "Address": "0xA1"
+  },
+  {
+    "Name": "ACP_ADDRESS_EDB",
+    "Address": "0xB1"
+  }
+]

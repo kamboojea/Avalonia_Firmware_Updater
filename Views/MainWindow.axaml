@@ -1,0 +1,748 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="AvaloniaFirmwareUpdater.MainWindow"
+        Title="ACP Firmware Updater"
+        Icon="/Assets/Images/FirmwareUpdaterIcon.ico"
+        Width="1120"
+        Height="740"
+        MinWidth="940"
+        MinHeight="640"
+        FontFamily="Inter"
+        Background="#F4F6FA">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontSize" Value="30" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#17211C" />
+        </Style>
+
+        <Style Selector="TextBlock.subtitle">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#69736D" />
+        </Style>
+
+        <Style Selector="TextBlock.sectionTitle">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#17211C" />
+        </Style>
+
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#5D6761" />
+            <Setter Property="Margin" Value="0,18,0,7" />
+        </Style>
+
+        <Style Selector="TextBox, ComboBox, NumericUpDown">
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#17211C" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#DCE2DE" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
+
+        <Style Selector="TextBox.hexPreview">
+            <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#0B6F66" />
+            <Setter Property="Background" Value="#E9F8F4" />
+            <Setter Property="BorderBrush" Value="#8DD7C8" />
+        </Style>
+
+        <Style Selector="Border.inputAttention">
+            <Setter Property="BoxShadow" Value="0 0 0 4 #44E0B334" />
+        </Style>
+
+        <Style Selector="TextBox.inputAttention">
+            <Setter Property="Background" Value="#FFF8E1" />
+            <Setter Property="BorderBrush" Value="#E0B334" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+
+        <Style Selector="Button">
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="18,9" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#17211C" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D6DED9" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="Button:pointerover">
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#C3CDC8" />
+        </Style>
+
+        <Style Selector="Button:pressed">
+            <Setter Property="Opacity" Value="0.92" />
+        </Style>
+
+        <Style Selector="Button.primary">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="Background" Value="#0B6F66" />
+            <Setter Property="BorderBrush" Value="#0B6F66" />
+        </Style>
+
+        <Style Selector="Button.primary:pointerover">
+            <Setter Property="Background" Value="#075D56" />
+            <Setter Property="BorderBrush" Value="#075D56" />
+        </Style>
+
+        <Style Selector="Button.secondary">
+            <Setter Property="Foreground" Value="#313B36" />
+            <Setter Property="Background" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="Button.quiet">
+            <Setter Property="Foreground" Value="#5650A8" />
+            <Setter Property="Background" Value="#F1F0FF" />
+            <Setter Property="BorderBrush" Value="#D7D4FF" />
+        </Style>
+
+        <Style Selector="Button.danger">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="Background" Value="#B3261E" />
+            <Setter Property="BorderBrush" Value="#B3261E" />
+        </Style>
+
+        <Style Selector="Button.danger:pointerover">
+            <Setter Property="Background" Value="#941B15" />
+            <Setter Property="BorderBrush" Value="#941B15" />
+        </Style>
+
+        <Style Selector="Viewbox.gearAssembly">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+
+        <Style Selector="Border.progressTrack">
+            <Setter Property="Height" Value="10" />
+            <Setter Property="Background" Value="#DCE2DE" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+
+        <Style Selector="Border.progressPulse">
+            <Setter Property="Width" Value="112" />
+            <Setter Property="Height" Value="10" />
+            <Setter Property="Background" Value="#66FFFFFF" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*" Margin="28" RowSpacing="20">
+        <Border Grid.Row="0"
+                Background="#FFFFFF"
+                BorderBrush="#E0E6E2"
+                BorderThickness="1"
+                CornerRadius="8"
+                ClipToBounds="True"
+                Padding="24,18"
+                BoxShadow="0 18 44 0 #16000000">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="18">
+                <Border Grid.Column="0"
+                        Width="58"
+                        Height="58"
+                        CornerRadius="8"
+                        Background="#ECEFF3">
+                    <Image Source="avares://AvaloniaFirmwareUpdater/Assets/Images/FirmwareUpdaterIcon.png"
+                           Width="44"
+                           Height="44"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+                </Border>
+
+                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                    <TextBlock Classes="title" Text="ACP Firmware Updater" />
+                    <TextBlock Classes="subtitle" Text="OTA firmware update over CAN" />
+                </StackPanel>
+
+                <Grid Grid.Column="2" ColumnDefinitions="Auto,Auto" ColumnSpacing="16" VerticalAlignment="Center">
+                    <Image Grid.Column="0"
+                           Source="avares://AvaloniaFirmwareUpdater/Assets/Images/BauerMediaOutdoorTechnic.png"
+                           Width="300"
+                           MaxHeight="64"
+                           Stretch="Uniform"
+                           Opacity="0.28" />
+
+                    <Border x:Name="StatusPill"
+                            Grid.Column="1"
+                            Background="#F7F9FB"
+                            BorderBrush="#DCE2DE"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12,8"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border x:Name="ResultIconBadge"
+                                    Width="24"
+                                    Height="24"
+                                    Background="#E9F8F4"
+                                    CornerRadius="12"
+                                    IsVisible="False">
+                                <TextBlock x:Name="ResultIconText"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Text="&#x2713;"
+                                           Foreground="#0B6F66" />
+                            </Border>
+                            <Viewbox x:Name="FailureBugIcon"
+                                     Width="32"
+                                     Height="28"
+                                     IsVisible="False">
+                                <Canvas Width="64" Height="56">
+                                    <Line StartPoint="17,18" EndPoint="4,10" Stroke="#272220" StrokeThickness="5" StrokeLineCap="Round" />
+                                    <Line StartPoint="17,28" EndPoint="2,28" Stroke="#272220" StrokeThickness="5" StrokeLineCap="Round" />
+                                    <Line StartPoint="17,38" EndPoint="5,48" Stroke="#272220" StrokeThickness="5" StrokeLineCap="Round" />
+                                    <Line StartPoint="40,14" EndPoint="52,3" Stroke="#272220" StrokeThickness="5" StrokeLineCap="Round" />
+                                    <Line StartPoint="42,31" EndPoint="58,35" Stroke="#272220" StrokeThickness="5" StrokeLineCap="Round" />
+                                    <Line StartPoint="38,43" EndPoint="51,53" Stroke="#272220" StrokeThickness="5" StrokeLineCap="Round" />
+                                    <Line StartPoint="25,12" EndPoint="22,2" Stroke="#272220" StrokeThickness="4" StrokeLineCap="Round" />
+                                    <Line StartPoint="35,12" EndPoint="40,2" Stroke="#272220" StrokeThickness="4" StrokeLineCap="Round" />
+                                    <Ellipse Canvas.Left="12" Canvas.Top="10" Width="34" Height="36" Fill="#D62828" Stroke="#A91717" StrokeThickness="3" />
+                                    <Ellipse Canvas.Left="34" Canvas.Top="26" Width="24" Height="24" Fill="#D62828" Stroke="#A91717" StrokeThickness="3" />
+                                    <Line StartPoint="42,34" EndPoint="52,44" Stroke="#FFFFFF" StrokeThickness="5" StrokeLineCap="Round" />
+                                    <Line StartPoint="52,34" EndPoint="42,44" Stroke="#FFFFFF" StrokeThickness="5" StrokeLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock x:Name="StatusText"
+                                       Text="Ready"
+                                       Foreground="#5D6761"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="390,*" ColumnSpacing="22">
+            <Border Grid.Column="0"
+                    Background="#FFFFFF"
+                    BorderBrush="#E0E6E2"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="24"
+                    BoxShadow="0 18 44 0 #14000000">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Classes="sectionTitle" Text="Update setup" />
+
+                        <TextBlock Classes="label" Text="Firmware file" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <Border x:Name="FirmwarePathFrame"
+                                    Grid.Column="0"
+                                    CornerRadius="8">
+                                <TextBox x:Name="FirmwarePathTextBox"
+                                         PlaceholderText="Firmware image"
+                                         IsReadOnly="True" />
+                            </Border>
+                            <Border Grid.Column="1"
+                                    CornerRadius="8"
+                                    BoxShadow="0 7 18 0 #21000000">
+                                <Button x:Name="BrowseButton"
+                                        Classes="secondary"
+                                        Content="Browse"
+                                        Click="BrowseButton_Click" />
+                            </Border>
+                        </Grid>
+                        <TextBlock x:Name="FirmwareAttentionText"
+                                   Text="Firmware file is required"
+                                   Foreground="#B86B00"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Margin="2,6,0,0"
+                                   IsVisible="False" />
+
+                        <TextBlock Classes="label" Text="Board address" />
+                        <Grid ColumnDefinitions="*,124" ColumnSpacing="10">
+                            <ComboBox x:Name="BoardAddressComboBox"
+                                      Grid.Column="0"
+                                      SelectionChanged="BoardAddressComboBox_SelectionChanged" />
+                            <TextBox x:Name="HexAddressTextBox"
+                                     Grid.Column="1"
+                                     Classes="hexPreview"
+                                     IsReadOnly="True" />
+                        </Grid>
+
+                        <TextBlock Classes="label" Text="Watchdog interval (seconds)" />
+                        <NumericUpDown x:Name="WatchdogNumericUpDown"
+                                       Minimum="0"
+                                       Maximum="3600"
+                                       Increment="1"
+                                       Value="0" />
+                    </StackPanel>
+
+                    <Border Grid.Row="1"
+                            Margin="0,24,0,24"
+                            Background="#F4F7FA"
+                            BorderBrush="#E3E9E6"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            VerticalAlignment="Top">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Selected target"
+                                       Foreground="#69736D"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="SelectedTargetText"
+                                       Text="BROADCAST #0x00"
+                                       Foreground="#17211C"
+                                       FontSize="22"
+                                       FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="2" RowDefinitions="Auto,Auto" RowSpacing="10">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Border Grid.Column="0"
+                                    CornerRadius="8"
+                                    BoxShadow="0 10 24 0 #26000000">
+                                <Button x:Name="StartButton"
+                                        Classes="primary"
+                                        Content="Start update"
+                                        Click="StartButton_Click" />
+                            </Border>
+                            <Border Grid.Column="1"
+                                    CornerRadius="8"
+                                    BoxShadow="0 10 24 0 #26000000">
+                                <Button x:Name="CancelButton"
+                                        Classes="danger"
+                                        Content="Cancel"
+                                        IsEnabled="False"
+                                        Click="CancelButton_Click" />
+                            </Border>
+                        </Grid>
+
+                        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Border Grid.Column="0"
+                                    CornerRadius="8"
+                                    BoxShadow="0 6 16 0 #18000000">
+                                <Button x:Name="LogVisibilityButton"
+                                        Classes="quiet"
+                                        Content="Hide logs"
+                                        Click="LogVisibilityButton_Click" />
+                            </Border>
+                            <Border Grid.Column="1"
+                                    CornerRadius="8"
+                                    BoxShadow="0 6 16 0 #18000000">
+                                <Button x:Name="ClearLogButton"
+                                        Classes="secondary"
+                                        Content="Clear logs"
+                                        Click="ClearLogButton_Click" />
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border x:Name="RightPaneCard"
+                    Grid.Column="1"
+                    Background="#FFFFFF"
+                    BorderBrush="#E0E6E2"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    ClipToBounds="True"
+                    BoxShadow="0 18 44 0 #14000000">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <DockPanel x:Name="DebugHeader"
+                               Grid.Row="0"
+                               LastChildFill="False"
+                               Margin="18,16,18,12">
+                        <StackPanel DockPanel.Dock="Left" Spacing="3">
+                            <TextBlock x:Name="DebugTitleText"
+                                       Classes="sectionTitle"
+                                       Text="Debug output"
+                                       Foreground="#17211C" />
+                            <TextBlock x:Name="DebugSubtitleText"
+                                       Classes="subtitle"
+                                       Text="Live updater diagnostics"
+                                       Foreground="#69736D" />
+                        </StackPanel>
+
+                        <StackPanel DockPanel.Dock="Right"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Center">
+                            <TextBlock x:Name="StartTimeText"
+                                       Text="Start: --"
+                                       Foreground="#69736D"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <TextBlock x:Name="ElapsedTimeText"
+                                       Text="Elapsed: 00:00"
+                                       Foreground="#69736D"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <TextBlock x:Name="FinishTimeText"
+                                       Text="Finish: --"
+                                       Foreground="#69736D"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <Button x:Name="CopyLogButton"
+                                    Classes="secondary"
+                                    MinHeight="34"
+                                    Padding="12,6"
+                                    Content="Copy logs"
+                                    Click="CopyLogButton_Click" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <Grid Grid.Row="1" Margin="18,0,18,0">
+                        <Border x:Name="DebugLogBody"
+                                Background="#0F1712"
+                                BorderBrush="#26342D"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="14">
+                            <ScrollViewer x:Name="DebugLogScrollViewer"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="DebugLogStackPanel" Spacing="4" />
+                            </ScrollViewer>
+                        </Border>
+
+                        <Border x:Name="ProgressOnlyBody"
+                                Background="#F4F7FA"
+                                BorderBrush="#E3E9E6"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="28"
+                                IsVisible="False">
+                            <StackPanel VerticalAlignment="Center" Spacing="18">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="sectionTitle"
+                                               Text="Update progress"
+                                               HorizontalAlignment="Center" />
+                                    <TextBlock x:Name="HiddenProgressStateText"
+                                               Text="Ready"
+                                               HorizontalAlignment="Center"
+                                               Foreground="#69736D"
+                                               FontWeight="SemiBold" />
+                                </StackPanel>
+
+                                <Viewbox x:Name="HiddenGearAssembly"
+                                         Classes="gearAssembly"
+                                         Width="170"
+                                         Height="116"
+                                         HorizontalAlignment="Center">
+                                    <Canvas Width="110" Height="82">
+                                        <Canvas x:Name="HiddenLargeGear"
+                                                Width="54"
+                                                Height="54"
+                                                Canvas.Left="4"
+                                                Canvas.Top="25"
+                                                RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="-3" Fill="#17211C" />
+                                            <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="41" Fill="#17211C" />
+                                            <Rectangle Width="16" Height="10" Canvas.Left="-3" Canvas.Top="22" Fill="#17211C" />
+                                            <Rectangle Width="16" Height="10" Canvas.Left="41" Canvas.Top="22" Fill="#17211C" />
+                                            <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="-45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="-45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Ellipse Canvas.Left="7" Canvas.Top="7" Width="40" Height="40" Fill="#17211C" />
+                                            <Ellipse Canvas.Left="18" Canvas.Top="18" Width="18" Height="18" Fill="#F4F7FA" />
+                                        </Canvas>
+
+                                        <Canvas x:Name="HiddenMediumGear"
+                                                Width="42"
+                                                Height="42"
+                                                Canvas.Left="51"
+                                                Canvas.Top="0"
+                                                RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="-2" Fill="#17211C" />
+                                            <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="31" Fill="#17211C" />
+                                            <Rectangle Width="13" Height="8" Canvas.Left="-2" Canvas.Top="17" Fill="#17211C" />
+                                            <Rectangle Width="13" Height="8" Canvas.Left="31" Canvas.Top="17" Fill="#17211C" />
+                                            <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="-45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="-45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Ellipse Canvas.Left="6" Canvas.Top="6" Width="30" Height="30" Fill="#17211C" />
+                                            <Ellipse Canvas.Left="15" Canvas.Top="15" Width="12" Height="12" Fill="#F4F7FA" />
+                                        </Canvas>
+
+                                        <Canvas x:Name="HiddenSmallGear"
+                                                Width="34"
+                                                Height="34"
+                                                Canvas.Left="66"
+                                                Canvas.Top="42"
+                                                RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="-2" Fill="#17211C" />
+                                            <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="25" Fill="#17211C" />
+                                            <Rectangle Width="11" Height="6" Canvas.Left="-2" Canvas.Top="14" Fill="#17211C" />
+                                            <Rectangle Width="11" Height="6" Canvas.Left="25" Canvas.Top="14" Fill="#17211C" />
+                                            <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="-45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform Angle="-45" />
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                            <Ellipse Canvas.Left="5" Canvas.Top="5" Width="24" Height="24" Fill="#17211C" />
+                                            <Ellipse Canvas.Left="13" Canvas.Top="13" Width="8" Height="8" Fill="#F4F7FA" />
+                                        </Canvas>
+                                    </Canvas>
+                                </Viewbox>
+
+                                <Border x:Name="HiddenProgressPulseHost"
+                                        Classes="progressTrack"
+                                        Height="16"
+                                        CornerRadius="8"
+                                        VerticalAlignment="Center">
+                                    <Grid>
+                                        <ProgressBar x:Name="HiddenProgressBar"
+                                                     Minimum="0"
+                                                     Maximum="100"
+                                                     Value="0"
+                                                     Height="16"
+                                                     Foreground="#0B6F66"
+                                                     Background="Transparent" />
+                                        <Border x:Name="HiddenProgressPulse"
+                                                Classes="progressPulse"
+                                                Height="16"
+                                                CornerRadius="8"
+                                                HorizontalAlignment="Left">
+                                            <Border.RenderTransform>
+                                                <TranslateTransform X="-140" />
+                                            </Border.RenderTransform>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <TextBlock x:Name="HiddenProgressPercentageText"
+                                           Text="0%"
+                                           HorizontalAlignment="Center"
+                                           FontSize="26"
+                                           FontWeight="SemiBold"
+                                           Foreground="#17211C" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border x:Name="ProgressStrip"
+                            Grid.Row="2"
+                            Margin="18,14,18,18"
+                            Background="#F4F7FA"
+                            BorderBrush="#E3E9E6"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+                            <Viewbox x:Name="ProgressGearAssembly"
+                                     Grid.RowSpan="2"
+                                     Grid.Column="0"
+                                     Classes="gearAssembly"
+                                     Width="72"
+                                     Height="54"
+                                     VerticalAlignment="Center">
+                                <Canvas Width="110" Height="82">
+                                    <Canvas x:Name="ProgressLargeGear"
+                                            Width="54"
+                                            Height="54"
+                                            Canvas.Left="4"
+                                            Canvas.Top="25"
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="-3" Fill="#17211C" />
+                                        <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="41" Fill="#17211C" />
+                                        <Rectangle Width="16" Height="10" Canvas.Left="-3" Canvas.Top="22" Fill="#17211C" />
+                                        <Rectangle Width="16" Height="10" Canvas.Left="41" Canvas.Top="22" Fill="#17211C" />
+                                        <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Ellipse Canvas.Left="7" Canvas.Top="7" Width="40" Height="40" Fill="#17211C" />
+                                        <Ellipse Canvas.Left="18" Canvas.Top="18" Width="18" Height="18" Fill="#F4F7FA" />
+                                    </Canvas>
+
+                                    <Canvas x:Name="ProgressMediumGear"
+                                            Width="42"
+                                            Height="42"
+                                            Canvas.Left="51"
+                                            Canvas.Top="0"
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="-2" Fill="#17211C" />
+                                        <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="31" Fill="#17211C" />
+                                        <Rectangle Width="13" Height="8" Canvas.Left="-2" Canvas.Top="17" Fill="#17211C" />
+                                        <Rectangle Width="13" Height="8" Canvas.Left="31" Canvas.Top="17" Fill="#17211C" />
+                                        <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Ellipse Canvas.Left="6" Canvas.Top="6" Width="30" Height="30" Fill="#17211C" />
+                                        <Ellipse Canvas.Left="15" Canvas.Top="15" Width="12" Height="12" Fill="#F4F7FA" />
+                                    </Canvas>
+
+                                    <Canvas x:Name="ProgressSmallGear"
+                                            Width="34"
+                                            Height="34"
+                                            Canvas.Left="66"
+                                            Canvas.Top="42"
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="-2" Fill="#17211C" />
+                                        <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="25" Fill="#17211C" />
+                                        <Rectangle Width="11" Height="6" Canvas.Left="-2" Canvas.Top="14" Fill="#17211C" />
+                                        <Rectangle Width="11" Height="6" Canvas.Left="25" Canvas.Top="14" Fill="#17211C" />
+                                        <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
+                                            <Rectangle.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <Ellipse Canvas.Left="5" Canvas.Top="5" Width="24" Height="24" Fill="#17211C" />
+                                        <Ellipse Canvas.Left="13" Canvas.Top="13" Width="8" Height="8" Fill="#F4F7FA" />
+                                    </Canvas>
+                                </Canvas>
+                            </Viewbox>
+
+                            <TextBlock x:Name="ProgressStateText"
+                                       Grid.Row="0"
+                                       Grid.Column="1"
+                                       Text="Ready"
+                                       Foreground="#69736D"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="ProgressPercentageText"
+                                       Grid.Row="0"
+                                       Grid.Column="2"
+                                       Text="0%"
+                                       Foreground="#17211C"
+                                       FontWeight="SemiBold" />
+                            <Border x:Name="ProgressPulseHost"
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Grid.ColumnSpan="2"
+                                    Classes="progressTrack">
+                                <Grid>
+                                    <ProgressBar x:Name="UpdateProgressBar"
+                                                 Minimum="0"
+                                                 Maximum="100"
+                                                 Value="0"
+                                                 Height="10"
+                                                 Foreground="#0B6F66"
+                                                 Background="Transparent" />
+                                    <Border x:Name="ProgressPulse"
+                                            Classes="progressPulse"
+                                            HorizontalAlignment="Left">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform X="-140" />
+                                        </Border.RenderTransform>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
