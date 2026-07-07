@@ -8,6 +8,7 @@ namespace AvaloniaFirmwareUpdater;
 internal sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private string? firmwarePath;
+    private Func<int, string> describeBoardAddress = address => $"0x{address:X2}";
     private BoardAddressOption? selectedBoard;
     private string? selectedComPort;
     private bool isBusy;
@@ -18,6 +19,16 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     private string compatibilitySummary = "Compatibility check will run before update.";
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public Func<int, string> DescribeBoardAddress
+    {
+        get => describeBoardAddress;
+        set
+        {
+            describeBoardAddress = value;
+            RefreshCompatibility();
+        }
+    }
 
     public string? FirmwarePath
     {
@@ -149,17 +160,20 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
             return "Compatibility check will run before update.";
         }
 
-        var filename = Path.GetFileNameWithoutExtension(FirmwarePath);
         var boardName = SelectedBoard.DisplayName;
         var address = SelectedBoard.Address.ToString("X2");
 
-        if (filename.Contains(boardName, StringComparison.OrdinalIgnoreCase) ||
-            filename.Contains(address, StringComparison.OrdinalIgnoreCase))
+        if (!FirmwareFilenameCompatibility.TryGetFileAddress(FirmwarePath, out var fileAddress, out _))
         {
-            return "Compatibility: filename matches the selected target.";
+            return $"Compatibility warning: filename must end with the board address, for example -{address}.hex.";
         }
 
-        return $"Compatibility warning: filename does not mention {boardName} or 0x{address}.";
+        if (FirmwareFilenameCompatibility.MatchesBoardAddress(FirmwarePath, SelectedBoard, out _))
+        {
+            return $"Compatibility: filename address {describeBoardAddress(fileAddress)} matches {boardName} 0x{address}.";
+        }
+
+        return $"Compatibility warning: filename address {describeBoardAddress(fileAddress)} does not match {boardName} 0x{address}.";
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

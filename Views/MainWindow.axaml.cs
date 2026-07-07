@@ -85,6 +85,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+        viewModel.DescribeBoardAddress = DescribeBoardAddress;
         InitializeProgressAnimationTransforms();
         viewModel.LoadSettings(loadedSettings);
 
@@ -220,10 +221,28 @@ public partial class MainWindow : Window
             return;
         }
 
-        var selectedComPort = GetSelectedComPort();
-        var cancellationTokenSource = new CancellationTokenSource();
         viewModel.FirmwarePath = firmwarePath;
         viewModel.SelectedBoard = boardAddress;
+        viewModel.SelectedComPort = GetSelectedComPort();
+        SyncViewModelToUi();
+
+        if (!FirmwareFilenameCompatibility.MatchesBoardAddress(firmwarePath, boardAddress, out var fileAddressText))
+        {
+            var expectedAddress = boardAddress.Address.ToString("X2");
+            var error = string.IsNullOrWhiteSpace(fileAddressText)
+                ? $"Firmware filename must end with the selected board address, for example -{expectedAddress}.hex."
+                : $"Firmware filename address {fileAddressText} does not match selected board {boardAddress.DisplayName} 0x{expectedAddress}.";
+
+            SetStatus(AppStatus.Warning, "Wrong firmware");
+            SetProgress(0, "Wrong firmware");
+            viewModel.ResultSummary = "Update blocked by firmware filename compatibility check.";
+            SyncViewModelToUi();
+            AppendLog($"Error: {error}");
+            return;
+        }
+
+        var selectedComPort = GetSelectedComPort();
+        var cancellationTokenSource = new CancellationTokenSource();
         viewModel.SelectedComPort = selectedComPort;
         viewModel.ResultSummary = "Update is running.";
         viewModel.Phase = UpdatePhase.Preflight;
