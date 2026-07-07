@@ -35,7 +35,7 @@
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="#5D6761" />
-            <Setter Property="Margin" Value="0,18,0,7" />
+            <Setter Property="Margin" Value="0,12,0,6" />
         </Style>
 
         <Style Selector="TextBox, ComboBox, NumericUpDown">
@@ -47,6 +47,18 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="8" />
             <Setter Property="Padding" Value="12,8" />
+        </Style>
+
+        <Style Selector="NumericUpDown:error">
+            <Setter Property="BorderBrush" Value="#DCE2DE" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="NumericUpDown:invalid">
+            <Setter Property="BorderBrush" Value="#DCE2DE" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="#FFFFFF" />
         </Style>
 
         <Style Selector="TextBox.hexPreview">
@@ -140,9 +152,52 @@
             <Setter Property="CornerRadius" Value="5" />
             <Setter Property="IsVisible" Value="False" />
         </Style>
+
+        <Style Selector="TabControl">
+            <Setter Property="Background" Value="#0F1712" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+
+        <Style Selector="TabItem">
+            <Setter Property="Background" Value="#AEB5BA" />
+            <Setter Property="BorderBrush" Value="#858E95" />
+            <Setter Property="BorderThickness" Value="1,1,1,0" />
+            <Setter Property="CornerRadius" Value="3,3,0,0" />
+            <Setter Property="Foreground" Value="#101417" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="0,0,1,0" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="10,5" />
+        </Style>
+
+        <Style Selector="TabItem:selected">
+            <Setter Property="Background" Value="#000000" />
+            <Setter Property="BorderBrush" Value="#000000" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+
+        <Style Selector="TabItem /template/ Border#PART_SelectedPipe">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+
+        <Style Selector="TextBlock.logPaneTitle">
+            <Setter Property="Foreground" Value="#65E38D" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*" Margin="28" RowSpacing="20">
+    <Grid RowDefinitions="Auto,*"
+          Margin="28"
+          RowSpacing="20"
+          HorizontalAlignment="Stretch">
         <Border Grid.Row="0"
                 Background="#FFFFFF"
                 BorderBrush="#E0E6E2"
@@ -280,31 +335,58 @@
                                      IsReadOnly="True" />
                         </Grid>
 
+                        <TextBlock Classes="label" Text="Communication port" />
+                        <ComboBox x:Name="ComPortComboBox"
+                                  SelectionChanged="ComPortComboBox_SelectionChanged"
+                                  DropDownOpened="ComPortComboBox_DropDownOpened" />
+
                         <TextBlock Classes="label" Text="Watchdog interval (seconds)" />
                         <NumericUpDown x:Name="WatchdogNumericUpDown"
                                        Minimum="0"
                                        Maximum="3600"
                                        Increment="1"
-                                       Value="0" />
+                                       Value="0"
+                                       ValueChanged="WatchdogNumericUpDown_ValueChanged" />
+                        <TextBlock Text="0 disables watchdog kicks. Use a non-zero interval only when the target hardware needs periodic keep-alive messages during long updates."
+                                   Foreground="#69736D"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="2,5,0,0" />
                     </StackPanel>
 
                     <Border Grid.Row="1"
-                            Margin="0,24,0,24"
+                            Margin="0,12,0,12"
                             Background="#F4F7FA"
                             BorderBrush="#E3E9E6"
                             BorderThickness="1"
                             CornerRadius="8"
-                            Padding="16"
-                            VerticalAlignment="Top">
-                        <StackPanel Spacing="8">
+                            Padding="14"
+                            ClipToBounds="True">
+                        <StackPanel Spacing="6">
                             <TextBlock Text="Selected target"
                                        Foreground="#69736D"
                                        FontWeight="SemiBold" />
                             <TextBlock x:Name="SelectedTargetText"
                                        Text="BROADCAST #0x00"
                                        Foreground="#17211C"
-                                       FontSize="22"
+                                       FontSize="19"
                                        FontWeight="SemiBold" />
+                            <TextBlock x:Name="PreflightSummaryText"
+                                       Text="Firmware: No firmware selected&#x0a;Target: EDB #0xB1&#x0a;Port: Auto find | Watchdog disabled"
+                                       Foreground="#44504A"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                            <TextBlock x:Name="CompatibilitySummaryText"
+                                       Text="Compatibility check will run before update."
+                                       Foreground="#69736D"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
+                            <TextBlock x:Name="ResultSummaryText"
+                                       Text="No update has run yet."
+                                       Foreground="#69736D"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
@@ -403,6 +485,12 @@
                                     Padding="12,6"
                                     Content="Copy logs"
                                     Click="CopyLogButton_Click" />
+                            <Button x:Name="ExportLogButton"
+                                    Classes="secondary"
+                                    MinHeight="34"
+                                    Padding="12,6"
+                                    Content="Export"
+                                    Click="ExportLogButton_Click" />
                         </StackPanel>
                     </DockPanel>
 
@@ -412,12 +500,59 @@
                                 BorderBrush="#26342D"
                                 BorderThickness="1"
                                 CornerRadius="8"
-                                Padding="14">
-                            <ScrollViewer x:Name="DebugLogScrollViewer"
-                                          HorizontalScrollBarVisibility="Auto"
-                                          VerticalScrollBarVisibility="Auto">
-                                <StackPanel x:Name="DebugLogStackPanel" Spacing="4" />
-                            </ScrollViewer>
+                                ClipToBounds="True"
+                                Padding="0">
+                            <TabControl x:Name="LogTabControl"
+                                        Background="#0F1712"
+                                        BorderThickness="0">
+                                <TabItem Header="LocalLogs">
+                                    <Border Background="#0F1712" Padding="14">
+                                        <ScrollViewer x:Name="LocalLogScrollViewer"
+                                                      HorizontalScrollBarVisibility="Auto"
+                                                      VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="LocalLogStackPanel" Spacing="4" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </TabItem>
+                                <TabItem Header="CommLogs">
+                                    <Border Background="#0F1712" Padding="14">
+                                        <ScrollViewer x:Name="CommLogScrollViewer"
+                                                      HorizontalScrollBarVisibility="Auto"
+                                                      VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="CommLogStackPanel" Spacing="4" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </TabItem>
+                                <TabItem Header="Both">
+                                    <Border Background="#0F1712" Padding="14">
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                                            <Grid Grid.Column="0" RowDefinitions="Auto,*" RowSpacing="8">
+                                                <TextBlock Classes="logPaneTitle" Text="LocalLogs" />
+                                                <ScrollViewer x:Name="BothLocalLogScrollViewer"
+                                                              Grid.Row="1"
+                                                              HorizontalScrollBarVisibility="Auto"
+                                                              VerticalScrollBarVisibility="Auto">
+                                                    <StackPanel x:Name="BothLocalLogStackPanel" Spacing="4" />
+                                                </ScrollViewer>
+                                            </Grid>
+                                            <Border Grid.Column="1"
+                                                    BorderBrush="#26342D"
+                                                    BorderThickness="1,0,0,0"
+                                                    Padding="14,0,0,0">
+                                                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                                                    <TextBlock Classes="logPaneTitle" Text="CommLogs" />
+                                                <ScrollViewer x:Name="BothCommLogScrollViewer"
+                                                              Grid.Row="1"
+                                                              HorizontalScrollBarVisibility="Auto"
+                                                              VerticalScrollBarVisibility="Auto">
+                                                    <StackPanel x:Name="BothCommLogStackPanel" Spacing="4" />
+                                                </ScrollViewer>
+                                                </Grid>
+                                            </Border>
+                                            </Grid>
+                                    </Border>
+                                </TabItem>
+                            </TabControl>
                         </Border>
 
                         <Border x:Name="ProgressOnlyBody"
@@ -451,32 +586,18 @@
                                                 Canvas.Left="4"
                                                 Canvas.Top="25"
                                                 RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="-3" Fill="#17211C" />
-                                            <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="41" Fill="#17211C" />
-                                            <Rectangle Width="16" Height="10" Canvas.Left="-3" Canvas.Top="22" Fill="#17211C" />
-                                            <Rectangle Width="16" Height="10" Canvas.Left="41" Canvas.Top="22" Fill="#17211C" />
-                                            <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="-45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="-45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Ellipse Canvas.Left="7" Canvas.Top="7" Width="40" Height="40" Fill="#17211C" />
-                                            <Ellipse Canvas.Left="18" Canvas.Top="18" Width="18" Height="18" Fill="#F4F7FA" />
+                                            <Path Data="M 27.0,7.0 L 29.5,2.1 L 31.9,2.5 L 32.8,7.9 L 34.7,8.5 L 38.8,5.0 L 40.9,6.2 L 39.7,11.5 L 41.1,12.9 L 46.3,11.1 L 47.8,13.1 L 44.6,17.6 L 45.5,19.3 L 50.9,19.7 L 51.5,22.1 L 46.9,25.0 L 47.0,27.0 L 51.9,29.5 L 51.5,31.9 L 46.1,32.8 L 45.5,34.7 L 49.0,38.8 L 47.8,40.9 L 42.5,39.7 L 41.1,41.1 L 42.9,46.3 L 40.9,47.8 L 36.4,44.6 L 34.7,45.5 L 34.3,50.9 L 31.9,51.5 L 29.0,46.9 L 27.0,47.0 L 24.5,51.9 L 22.1,51.5 L 21.2,46.1 L 19.3,45.5 L 15.2,49.0 L 13.1,47.8 L 14.3,42.5 L 12.9,41.1 L 7.7,42.9 L 6.2,40.9 L 9.4,36.4 L 8.5,34.7 L 3.1,34.3 L 2.5,31.9 L 7.1,29.0 L 7.0,27.0 L 2.1,24.5 L 2.5,22.1 L 7.9,21.2 L 8.5,19.3 L 5.0,15.2 L 6.2,13.1 L 11.5,14.3 L 12.9,12.9 L 11.1,7.7 L 13.1,6.2 L 17.6,9.4 L 19.3,8.5 L 19.7,3.1 L 22.1,2.5 L 25.0,7.1 Z" Fill="#000000" Opacity="0.18">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="3" Y="3" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Path Data="M 27.0,7.0 L 29.5,2.1 L 31.9,2.5 L 32.8,7.9 L 34.7,8.5 L 38.8,5.0 L 40.9,6.2 L 39.7,11.5 L 41.1,12.9 L 46.3,11.1 L 47.8,13.1 L 44.6,17.6 L 45.5,19.3 L 50.9,19.7 L 51.5,22.1 L 46.9,25.0 L 47.0,27.0 L 51.9,29.5 L 51.5,31.9 L 46.1,32.8 L 45.5,34.7 L 49.0,38.8 L 47.8,40.9 L 42.5,39.7 L 41.1,41.1 L 42.9,46.3 L 40.9,47.8 L 36.4,44.6 L 34.7,45.5 L 34.3,50.9 L 31.9,51.5 L 29.0,46.9 L 27.0,47.0 L 24.5,51.9 L 22.1,51.5 L 21.2,46.1 L 19.3,45.5 L 15.2,49.0 L 13.1,47.8 L 14.3,42.5 L 12.9,41.1 L 7.7,42.9 L 6.2,40.9 L 9.4,36.4 L 8.5,34.7 L 3.1,34.3 L 2.5,31.9 L 7.1,29.0 L 7.0,27.0 L 2.1,24.5 L 2.5,22.1 L 7.9,21.2 L 8.5,19.3 L 5.0,15.2 L 6.2,13.1 L 11.5,14.3 L 12.9,12.9 L 11.1,7.7 L 13.1,6.2 L 17.6,9.4 L 19.3,8.5 L 19.7,3.1 L 22.1,2.5 L 25.0,7.1 Z" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="3" StrokeJoin="Round" />
+                                            <Path Data="M 27.0,7.0 L 29.5,2.1 L 31.9,2.5 L 32.8,7.9 L 34.7,8.5 L 38.8,5.0 L 40.9,6.2 L 39.7,11.5 L 41.1,12.9 L 46.3,11.1 L 47.8,13.1 L 44.6,17.6 L 45.5,19.3 L 50.9,19.7 L 51.5,22.1 L 46.9,25.0 L 47.0,27.0 L 51.9,29.5 L 51.5,31.9 L 46.1,32.8 L 45.5,34.7 L 49.0,38.8 L 47.8,40.9 L 42.5,39.7 L 41.1,41.1 L 42.9,46.3 L 40.9,47.8 L 36.4,44.6 L 34.7,45.5 L 34.3,50.9 L 31.9,51.5 L 29.0,46.9 L 27.0,47.0 L 24.5,51.9 L 22.1,51.5 L 21.2,46.1 L 19.3,45.5 L 15.2,49.0 L 13.1,47.8 L 14.3,42.5 L 12.9,41.1 L 7.7,42.9 L 6.2,40.9 L 9.4,36.4 L 8.5,34.7 L 3.1,34.3 L 2.5,31.9 L 7.1,29.0 L 7.0,27.0 L 2.1,24.5 L 2.5,22.1 L 7.9,21.2 L 8.5,19.3 L 5.0,15.2 L 6.2,13.1 L 11.5,14.3 L 12.9,12.9 L 11.1,7.7 L 13.1,6.2 L 17.6,9.4 L 19.3,8.5 L 19.7,3.1 L 22.1,2.5 L 25.0,7.1 Z" Fill="Transparent" Stroke="#FFFFFF" StrokeThickness="1" StrokeJoin="Round" Opacity="0.55">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="-1" Y="-1" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Ellipse Canvas.Left="15" Canvas.Top="15" Width="24" Height="24" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="3" />                                        
                                         </Canvas>
 
                                         <Canvas x:Name="HiddenMediumGear"
@@ -485,32 +606,18 @@
                                                 Canvas.Left="58"
                                                 Canvas.Top="31"
                                                 RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="-2" Fill="#17211C" />
-                                            <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="31" Fill="#17211C" />
-                                            <Rectangle Width="13" Height="8" Canvas.Left="-2" Canvas.Top="17" Fill="#17211C" />
-                                            <Rectangle Width="13" Height="8" Canvas.Left="31" Canvas.Top="17" Fill="#17211C" />
-                                            <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="-45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="-45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Ellipse Canvas.Left="6" Canvas.Top="6" Width="30" Height="30" Fill="#17211C" />
-                                            <Ellipse Canvas.Left="15" Canvas.Top="15" Width="12" Height="12" Fill="#F4F7FA" />
+                                            <Path Data="M 21.0,6.0 L 23.1,2.1 L 25.2,2.5 L 26.0,6.8 L 27.5,7.5 L 31.1,4.9 L 32.8,6.1 L 31.6,10.4 L 32.7,11.6 L 37.1,10.9 L 38.1,12.8 L 35.2,16.0 L 35.6,17.7 L 39.9,18.9 L 40.0,21.0 L 35.9,22.7 L 35.6,24.3 L 38.9,27.3 L 38.1,29.2 L 33.7,29.0 L 32.7,30.4 L 34.4,34.4 L 32.8,35.9 L 29.0,33.7 L 27.5,34.5 L 27.3,38.9 L 25.2,39.5 L 22.7,35.9 L 21.0,36.0 L 18.9,39.9 L 16.8,39.5 L 16.0,35.2 L 14.5,34.5 L 10.9,37.1 L 9.2,35.9 L 10.4,31.6 L 9.3,30.4 L 4.9,31.1 L 3.9,29.2 L 6.8,26.0 L 6.4,24.3 L 2.1,23.1 L 2.0,21.0 L 6.1,19.3 L 6.4,17.7 L 3.1,14.7 L 3.9,12.8 L 8.3,13.0 L 9.3,11.6 L 7.6,7.6 L 9.2,6.1 L 13.0,8.3 L 14.5,7.5 L 14.7,3.1 L 16.8,2.5 L 19.3,6.1 Z" Fill="#000000" Opacity="0.18">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="3" Y="3" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Path Data="M 21.0,6.0 L 23.1,2.1 L 25.2,2.5 L 26.0,6.8 L 27.5,7.5 L 31.1,4.9 L 32.8,6.1 L 31.6,10.4 L 32.7,11.6 L 37.1,10.9 L 38.1,12.8 L 35.2,16.0 L 35.6,17.7 L 39.9,18.9 L 40.0,21.0 L 35.9,22.7 L 35.6,24.3 L 38.9,27.3 L 38.1,29.2 L 33.7,29.0 L 32.7,30.4 L 34.4,34.4 L 32.8,35.9 L 29.0,33.7 L 27.5,34.5 L 27.3,38.9 L 25.2,39.5 L 22.7,35.9 L 21.0,36.0 L 18.9,39.9 L 16.8,39.5 L 16.0,35.2 L 14.5,34.5 L 10.9,37.1 L 9.2,35.9 L 10.4,31.6 L 9.3,30.4 L 4.9,31.1 L 3.9,29.2 L 6.8,26.0 L 6.4,24.3 L 2.1,23.1 L 2.0,21.0 L 6.1,19.3 L 6.4,17.7 L 3.1,14.7 L 3.9,12.8 L 8.3,13.0 L 9.3,11.6 L 7.6,7.6 L 9.2,6.1 L 13.0,8.3 L 14.5,7.5 L 14.7,3.1 L 16.8,2.5 L 19.3,6.1 Z" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.6" StrokeJoin="Round" />
+                                            <Path Data="M 21.0,6.0 L 23.1,2.1 L 25.2,2.5 L 26.0,6.8 L 27.5,7.5 L 31.1,4.9 L 32.8,6.1 L 31.6,10.4 L 32.7,11.6 L 37.1,10.9 L 38.1,12.8 L 35.2,16.0 L 35.6,17.7 L 39.9,18.9 L 40.0,21.0 L 35.9,22.7 L 35.6,24.3 L 38.9,27.3 L 38.1,29.2 L 33.7,29.0 L 32.7,30.4 L 34.4,34.4 L 32.8,35.9 L 29.0,33.7 L 27.5,34.5 L 27.3,38.9 L 25.2,39.5 L 22.7,35.9 L 21.0,36.0 L 18.9,39.9 L 16.8,39.5 L 16.0,35.2 L 14.5,34.5 L 10.9,37.1 L 9.2,35.9 L 10.4,31.6 L 9.3,30.4 L 4.9,31.1 L 3.9,29.2 L 6.8,26.0 L 6.4,24.3 L 2.1,23.1 L 2.0,21.0 L 6.1,19.3 L 6.4,17.7 L 3.1,14.7 L 3.9,12.8 L 8.3,13.0 L 9.3,11.6 L 7.6,7.6 L 9.2,6.1 L 13.0,8.3 L 14.5,7.5 L 14.7,3.1 L 16.8,2.5 L 19.3,6.1 Z" Fill="Transparent" Stroke="#FFFFFF" StrokeThickness="1" StrokeJoin="Round" Opacity="0.55">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="-1" Y="-1" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Ellipse Canvas.Left="12" Canvas.Top="12" Width="18" Height="18" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.6" />                                        
                                         </Canvas>
 
                                         <Canvas x:Name="HiddenSmallGear"
@@ -519,32 +626,18 @@
                                                 Canvas.Left="66"
                                                 Canvas.Top="42"
                                                 RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="-2" Fill="#17211C" />
-                                            <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="25" Fill="#17211C" />
-                                            <Rectangle Width="11" Height="6" Canvas.Left="-2" Canvas.Top="14" Fill="#17211C" />
-                                            <Rectangle Width="11" Height="6" Canvas.Left="25" Canvas.Top="14" Fill="#17211C" />
-                                            <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="-45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                                <Rectangle.RenderTransform>
-                                                    <RotateTransform Angle="-45" />
-                                                </Rectangle.RenderTransform>
-                                            </Rectangle>
-                                            <Ellipse Canvas.Left="5" Canvas.Top="5" Width="24" Height="24" Fill="#17211C" />
-                                            <Ellipse Canvas.Left="13" Canvas.Top="13" Width="8" Height="8" Fill="#F4F7FA" />
+                                            <Path Data="M 17.0,5.0 L 19.0,2.1 L 20.9,2.5 L 21.6,5.9 L 23.0,6.6 L 26.1,5.1 L 27.6,6.4 L 26.5,9.7 L 27.4,11.0 L 30.9,11.3 L 31.5,13.1 L 28.9,15.4 L 29.0,17.0 L 31.9,19.0 L 31.5,20.9 L 28.1,21.6 L 27.4,23.0 L 28.9,26.1 L 27.6,27.6 L 24.3,26.5 L 23.0,27.4 L 22.7,30.9 L 20.9,31.5 L 18.6,28.9 L 17.0,29.0 L 15.0,31.9 L 13.1,31.5 L 12.4,28.1 L 11.0,27.4 L 7.9,28.9 L 6.4,27.6 L 7.5,24.3 L 6.6,23.0 L 3.1,22.7 L 2.5,20.9 L 5.1,18.6 L 5.0,17.0 L 2.1,15.0 L 2.5,13.1 L 5.9,12.4 L 6.6,11.0 L 5.1,7.9 L 6.4,6.4 L 9.7,7.5 L 11.0,6.6 L 11.3,3.1 L 13.1,2.5 L 15.4,5.1 Z" Fill="#000000" Opacity="0.18">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="3" Y="3" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Path Data="M 17.0,5.0 L 19.0,2.1 L 20.9,2.5 L 21.6,5.9 L 23.0,6.6 L 26.1,5.1 L 27.6,6.4 L 26.5,9.7 L 27.4,11.0 L 30.9,11.3 L 31.5,13.1 L 28.9,15.4 L 29.0,17.0 L 31.9,19.0 L 31.5,20.9 L 28.1,21.6 L 27.4,23.0 L 28.9,26.1 L 27.6,27.6 L 24.3,26.5 L 23.0,27.4 L 22.7,30.9 L 20.9,31.5 L 18.6,28.9 L 17.0,29.0 L 15.0,31.9 L 13.1,31.5 L 12.4,28.1 L 11.0,27.4 L 7.9,28.9 L 6.4,27.6 L 7.5,24.3 L 6.6,23.0 L 3.1,22.7 L 2.5,20.9 L 5.1,18.6 L 5.0,17.0 L 2.1,15.0 L 2.5,13.1 L 5.9,12.4 L 6.6,11.0 L 5.1,7.9 L 6.4,6.4 L 9.7,7.5 L 11.0,6.6 L 11.3,3.1 L 13.1,2.5 L 15.4,5.1 Z" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.3" StrokeJoin="Round" />
+                                            <Path Data="M 17.0,5.0 L 19.0,2.1 L 20.9,2.5 L 21.6,5.9 L 23.0,6.6 L 26.1,5.1 L 27.6,6.4 L 26.5,9.7 L 27.4,11.0 L 30.9,11.3 L 31.5,13.1 L 28.9,15.4 L 29.0,17.0 L 31.9,19.0 L 31.5,20.9 L 28.1,21.6 L 27.4,23.0 L 28.9,26.1 L 27.6,27.6 L 24.3,26.5 L 23.0,27.4 L 22.7,30.9 L 20.9,31.5 L 18.6,28.9 L 17.0,29.0 L 15.0,31.9 L 13.1,31.5 L 12.4,28.1 L 11.0,27.4 L 7.9,28.9 L 6.4,27.6 L 7.5,24.3 L 6.6,23.0 L 3.1,22.7 L 2.5,20.9 L 5.1,18.6 L 5.0,17.0 L 2.1,15.0 L 2.5,13.1 L 5.9,12.4 L 6.6,11.0 L 5.1,7.9 L 6.4,6.4 L 9.7,7.5 L 11.0,6.6 L 11.3,3.1 L 13.1,2.5 L 15.4,5.1 Z" Fill="Transparent" Stroke="#FFFFFF" StrokeThickness="1" StrokeJoin="Round" Opacity="0.55">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="-1" Y="-1" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Ellipse Canvas.Left="10" Canvas.Top="10" Width="14" Height="14" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.3" />                                        
                                         </Canvas>
                                     </Canvas>
                                 </Viewbox>
@@ -607,32 +700,18 @@
                                             Canvas.Left="4"
                                             Canvas.Top="25"
                                             RenderTransformOrigin="0.5,0.5">
-                                        <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="-3" Fill="#17211C" />
-                                        <Rectangle Width="10" Height="16" Canvas.Left="22" Canvas.Top="41" Fill="#17211C" />
-                                        <Rectangle Width="16" Height="10" Canvas.Left="-3" Canvas.Top="22" Fill="#17211C" />
-                                        <Rectangle Width="16" Height="10" Canvas.Left="41" Canvas.Top="22" Fill="#17211C" />
-                                        <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="-45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="5" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="10" Height="15" Canvas.Left="6" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="10" Height="15" Canvas.Left="38" Canvas.Top="34" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="-45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Ellipse Canvas.Left="7" Canvas.Top="7" Width="40" Height="40" Fill="#17211C" />
-                                        <Ellipse Canvas.Left="18" Canvas.Top="18" Width="18" Height="18" Fill="#F4F7FA" />
+                                            <Path Data="M 27.0,7.0 L 29.5,2.1 L 31.9,2.5 L 32.8,7.9 L 34.7,8.5 L 38.8,5.0 L 40.9,6.2 L 39.7,11.5 L 41.1,12.9 L 46.3,11.1 L 47.8,13.1 L 44.6,17.6 L 45.5,19.3 L 50.9,19.7 L 51.5,22.1 L 46.9,25.0 L 47.0,27.0 L 51.9,29.5 L 51.5,31.9 L 46.1,32.8 L 45.5,34.7 L 49.0,38.8 L 47.8,40.9 L 42.5,39.7 L 41.1,41.1 L 42.9,46.3 L 40.9,47.8 L 36.4,44.6 L 34.7,45.5 L 34.3,50.9 L 31.9,51.5 L 29.0,46.9 L 27.0,47.0 L 24.5,51.9 L 22.1,51.5 L 21.2,46.1 L 19.3,45.5 L 15.2,49.0 L 13.1,47.8 L 14.3,42.5 L 12.9,41.1 L 7.7,42.9 L 6.2,40.9 L 9.4,36.4 L 8.5,34.7 L 3.1,34.3 L 2.5,31.9 L 7.1,29.0 L 7.0,27.0 L 2.1,24.5 L 2.5,22.1 L 7.9,21.2 L 8.5,19.3 L 5.0,15.2 L 6.2,13.1 L 11.5,14.3 L 12.9,12.9 L 11.1,7.7 L 13.1,6.2 L 17.6,9.4 L 19.3,8.5 L 19.7,3.1 L 22.1,2.5 L 25.0,7.1 Z" Fill="#000000" Opacity="0.18">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="3" Y="3" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Path Data="M 27.0,7.0 L 29.5,2.1 L 31.9,2.5 L 32.8,7.9 L 34.7,8.5 L 38.8,5.0 L 40.9,6.2 L 39.7,11.5 L 41.1,12.9 L 46.3,11.1 L 47.8,13.1 L 44.6,17.6 L 45.5,19.3 L 50.9,19.7 L 51.5,22.1 L 46.9,25.0 L 47.0,27.0 L 51.9,29.5 L 51.5,31.9 L 46.1,32.8 L 45.5,34.7 L 49.0,38.8 L 47.8,40.9 L 42.5,39.7 L 41.1,41.1 L 42.9,46.3 L 40.9,47.8 L 36.4,44.6 L 34.7,45.5 L 34.3,50.9 L 31.9,51.5 L 29.0,46.9 L 27.0,47.0 L 24.5,51.9 L 22.1,51.5 L 21.2,46.1 L 19.3,45.5 L 15.2,49.0 L 13.1,47.8 L 14.3,42.5 L 12.9,41.1 L 7.7,42.9 L 6.2,40.9 L 9.4,36.4 L 8.5,34.7 L 3.1,34.3 L 2.5,31.9 L 7.1,29.0 L 7.0,27.0 L 2.1,24.5 L 2.5,22.1 L 7.9,21.2 L 8.5,19.3 L 5.0,15.2 L 6.2,13.1 L 11.5,14.3 L 12.9,12.9 L 11.1,7.7 L 13.1,6.2 L 17.6,9.4 L 19.3,8.5 L 19.7,3.1 L 22.1,2.5 L 25.0,7.1 Z" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="3" StrokeJoin="Round" />
+                                            <Path Data="M 27.0,7.0 L 29.5,2.1 L 31.9,2.5 L 32.8,7.9 L 34.7,8.5 L 38.8,5.0 L 40.9,6.2 L 39.7,11.5 L 41.1,12.9 L 46.3,11.1 L 47.8,13.1 L 44.6,17.6 L 45.5,19.3 L 50.9,19.7 L 51.5,22.1 L 46.9,25.0 L 47.0,27.0 L 51.9,29.5 L 51.5,31.9 L 46.1,32.8 L 45.5,34.7 L 49.0,38.8 L 47.8,40.9 L 42.5,39.7 L 41.1,41.1 L 42.9,46.3 L 40.9,47.8 L 36.4,44.6 L 34.7,45.5 L 34.3,50.9 L 31.9,51.5 L 29.0,46.9 L 27.0,47.0 L 24.5,51.9 L 22.1,51.5 L 21.2,46.1 L 19.3,45.5 L 15.2,49.0 L 13.1,47.8 L 14.3,42.5 L 12.9,41.1 L 7.7,42.9 L 6.2,40.9 L 9.4,36.4 L 8.5,34.7 L 3.1,34.3 L 2.5,31.9 L 7.1,29.0 L 7.0,27.0 L 2.1,24.5 L 2.5,22.1 L 7.9,21.2 L 8.5,19.3 L 5.0,15.2 L 6.2,13.1 L 11.5,14.3 L 12.9,12.9 L 11.1,7.7 L 13.1,6.2 L 17.6,9.4 L 19.3,8.5 L 19.7,3.1 L 22.1,2.5 L 25.0,7.1 Z" Fill="Transparent" Stroke="#FFFFFF" StrokeThickness="1" StrokeJoin="Round" Opacity="0.55">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="-1" Y="-1" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Ellipse Canvas.Left="15" Canvas.Top="15" Width="24" Height="24" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="3" />                                        
                                     </Canvas>
 
                                     <Canvas x:Name="ProgressMediumGear"
@@ -641,32 +720,18 @@
                                             Canvas.Left="58"
                                             Canvas.Top="31"
                                             RenderTransformOrigin="0.5,0.5">
-                                        <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="-2" Fill="#17211C" />
-                                        <Rectangle Width="8" Height="13" Canvas.Left="17" Canvas.Top="31" Fill="#17211C" />
-                                        <Rectangle Width="13" Height="8" Canvas.Left="-2" Canvas.Top="17" Fill="#17211C" />
-                                        <Rectangle Width="13" Height="8" Canvas.Left="31" Canvas.Top="17" Fill="#17211C" />
-                                        <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="-45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="8" Height="12" Canvas.Left="5" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="8" Height="12" Canvas.Left="29" Canvas.Top="26" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="-45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Ellipse Canvas.Left="6" Canvas.Top="6" Width="30" Height="30" Fill="#17211C" />
-                                        <Ellipse Canvas.Left="15" Canvas.Top="15" Width="12" Height="12" Fill="#F4F7FA" />
+                                            <Path Data="M 21.0,6.0 L 23.1,2.1 L 25.2,2.5 L 26.0,6.8 L 27.5,7.5 L 31.1,4.9 L 32.8,6.1 L 31.6,10.4 L 32.7,11.6 L 37.1,10.9 L 38.1,12.8 L 35.2,16.0 L 35.6,17.7 L 39.9,18.9 L 40.0,21.0 L 35.9,22.7 L 35.6,24.3 L 38.9,27.3 L 38.1,29.2 L 33.7,29.0 L 32.7,30.4 L 34.4,34.4 L 32.8,35.9 L 29.0,33.7 L 27.5,34.5 L 27.3,38.9 L 25.2,39.5 L 22.7,35.9 L 21.0,36.0 L 18.9,39.9 L 16.8,39.5 L 16.0,35.2 L 14.5,34.5 L 10.9,37.1 L 9.2,35.9 L 10.4,31.6 L 9.3,30.4 L 4.9,31.1 L 3.9,29.2 L 6.8,26.0 L 6.4,24.3 L 2.1,23.1 L 2.0,21.0 L 6.1,19.3 L 6.4,17.7 L 3.1,14.7 L 3.9,12.8 L 8.3,13.0 L 9.3,11.6 L 7.6,7.6 L 9.2,6.1 L 13.0,8.3 L 14.5,7.5 L 14.7,3.1 L 16.8,2.5 L 19.3,6.1 Z" Fill="#000000" Opacity="0.18">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="3" Y="3" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Path Data="M 21.0,6.0 L 23.1,2.1 L 25.2,2.5 L 26.0,6.8 L 27.5,7.5 L 31.1,4.9 L 32.8,6.1 L 31.6,10.4 L 32.7,11.6 L 37.1,10.9 L 38.1,12.8 L 35.2,16.0 L 35.6,17.7 L 39.9,18.9 L 40.0,21.0 L 35.9,22.7 L 35.6,24.3 L 38.9,27.3 L 38.1,29.2 L 33.7,29.0 L 32.7,30.4 L 34.4,34.4 L 32.8,35.9 L 29.0,33.7 L 27.5,34.5 L 27.3,38.9 L 25.2,39.5 L 22.7,35.9 L 21.0,36.0 L 18.9,39.9 L 16.8,39.5 L 16.0,35.2 L 14.5,34.5 L 10.9,37.1 L 9.2,35.9 L 10.4,31.6 L 9.3,30.4 L 4.9,31.1 L 3.9,29.2 L 6.8,26.0 L 6.4,24.3 L 2.1,23.1 L 2.0,21.0 L 6.1,19.3 L 6.4,17.7 L 3.1,14.7 L 3.9,12.8 L 8.3,13.0 L 9.3,11.6 L 7.6,7.6 L 9.2,6.1 L 13.0,8.3 L 14.5,7.5 L 14.7,3.1 L 16.8,2.5 L 19.3,6.1 Z" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.6" StrokeJoin="Round" />
+                                            <Path Data="M 21.0,6.0 L 23.1,2.1 L 25.2,2.5 L 26.0,6.8 L 27.5,7.5 L 31.1,4.9 L 32.8,6.1 L 31.6,10.4 L 32.7,11.6 L 37.1,10.9 L 38.1,12.8 L 35.2,16.0 L 35.6,17.7 L 39.9,18.9 L 40.0,21.0 L 35.9,22.7 L 35.6,24.3 L 38.9,27.3 L 38.1,29.2 L 33.7,29.0 L 32.7,30.4 L 34.4,34.4 L 32.8,35.9 L 29.0,33.7 L 27.5,34.5 L 27.3,38.9 L 25.2,39.5 L 22.7,35.9 L 21.0,36.0 L 18.9,39.9 L 16.8,39.5 L 16.0,35.2 L 14.5,34.5 L 10.9,37.1 L 9.2,35.9 L 10.4,31.6 L 9.3,30.4 L 4.9,31.1 L 3.9,29.2 L 6.8,26.0 L 6.4,24.3 L 2.1,23.1 L 2.0,21.0 L 6.1,19.3 L 6.4,17.7 L 3.1,14.7 L 3.9,12.8 L 8.3,13.0 L 9.3,11.6 L 7.6,7.6 L 9.2,6.1 L 13.0,8.3 L 14.5,7.5 L 14.7,3.1 L 16.8,2.5 L 19.3,6.1 Z" Fill="Transparent" Stroke="#FFFFFF" StrokeThickness="1" StrokeJoin="Round" Opacity="0.55">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="-1" Y="-1" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Ellipse Canvas.Left="12" Canvas.Top="12" Width="18" Height="18" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.6" />                                        
                                     </Canvas>
 
                                     <Canvas x:Name="ProgressSmallGear"
@@ -675,32 +740,18 @@
                                             Canvas.Left="66"
                                             Canvas.Top="42"
                                             RenderTransformOrigin="0.5,0.5">
-                                        <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="-2" Fill="#17211C" />
-                                        <Rectangle Width="6" Height="11" Canvas.Left="14" Canvas.Top="25" Fill="#17211C" />
-                                        <Rectangle Width="11" Height="6" Canvas.Left="-2" Canvas.Top="14" Fill="#17211C" />
-                                        <Rectangle Width="11" Height="6" Canvas.Left="25" Canvas.Top="14" Fill="#17211C" />
-                                        <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="-45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="4" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="6" Height="10" Canvas.Left="4" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Rectangle Width="6" Height="10" Canvas.Left="24" Canvas.Top="20" Fill="#17211C" RenderTransformOrigin="0.5,0.5">
-                                            <Rectangle.RenderTransform>
-                                                <RotateTransform Angle="-45" />
-                                            </Rectangle.RenderTransform>
-                                        </Rectangle>
-                                        <Ellipse Canvas.Left="5" Canvas.Top="5" Width="24" Height="24" Fill="#17211C" />
-                                        <Ellipse Canvas.Left="13" Canvas.Top="13" Width="8" Height="8" Fill="#F4F7FA" />
+                                            <Path Data="M 17.0,5.0 L 19.0,2.1 L 20.9,2.5 L 21.6,5.9 L 23.0,6.6 L 26.1,5.1 L 27.6,6.4 L 26.5,9.7 L 27.4,11.0 L 30.9,11.3 L 31.5,13.1 L 28.9,15.4 L 29.0,17.0 L 31.9,19.0 L 31.5,20.9 L 28.1,21.6 L 27.4,23.0 L 28.9,26.1 L 27.6,27.6 L 24.3,26.5 L 23.0,27.4 L 22.7,30.9 L 20.9,31.5 L 18.6,28.9 L 17.0,29.0 L 15.0,31.9 L 13.1,31.5 L 12.4,28.1 L 11.0,27.4 L 7.9,28.9 L 6.4,27.6 L 7.5,24.3 L 6.6,23.0 L 3.1,22.7 L 2.5,20.9 L 5.1,18.6 L 5.0,17.0 L 2.1,15.0 L 2.5,13.1 L 5.9,12.4 L 6.6,11.0 L 5.1,7.9 L 6.4,6.4 L 9.7,7.5 L 11.0,6.6 L 11.3,3.1 L 13.1,2.5 L 15.4,5.1 Z" Fill="#000000" Opacity="0.18">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="3" Y="3" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Path Data="M 17.0,5.0 L 19.0,2.1 L 20.9,2.5 L 21.6,5.9 L 23.0,6.6 L 26.1,5.1 L 27.6,6.4 L 26.5,9.7 L 27.4,11.0 L 30.9,11.3 L 31.5,13.1 L 28.9,15.4 L 29.0,17.0 L 31.9,19.0 L 31.5,20.9 L 28.1,21.6 L 27.4,23.0 L 28.9,26.1 L 27.6,27.6 L 24.3,26.5 L 23.0,27.4 L 22.7,30.9 L 20.9,31.5 L 18.6,28.9 L 17.0,29.0 L 15.0,31.9 L 13.1,31.5 L 12.4,28.1 L 11.0,27.4 L 7.9,28.9 L 6.4,27.6 L 7.5,24.3 L 6.6,23.0 L 3.1,22.7 L 2.5,20.9 L 5.1,18.6 L 5.0,17.0 L 2.1,15.0 L 2.5,13.1 L 5.9,12.4 L 6.6,11.0 L 5.1,7.9 L 6.4,6.4 L 9.7,7.5 L 11.0,6.6 L 11.3,3.1 L 13.1,2.5 L 15.4,5.1 Z" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.3" StrokeJoin="Round" />
+                                            <Path Data="M 17.0,5.0 L 19.0,2.1 L 20.9,2.5 L 21.6,5.9 L 23.0,6.6 L 26.1,5.1 L 27.6,6.4 L 26.5,9.7 L 27.4,11.0 L 30.9,11.3 L 31.5,13.1 L 28.9,15.4 L 29.0,17.0 L 31.9,19.0 L 31.5,20.9 L 28.1,21.6 L 27.4,23.0 L 28.9,26.1 L 27.6,27.6 L 24.3,26.5 L 23.0,27.4 L 22.7,30.9 L 20.9,31.5 L 18.6,28.9 L 17.0,29.0 L 15.0,31.9 L 13.1,31.5 L 12.4,28.1 L 11.0,27.4 L 7.9,28.9 L 6.4,27.6 L 7.5,24.3 L 6.6,23.0 L 3.1,22.7 L 2.5,20.9 L 5.1,18.6 L 5.0,17.0 L 2.1,15.0 L 2.5,13.1 L 5.9,12.4 L 6.6,11.0 L 5.1,7.9 L 6.4,6.4 L 9.7,7.5 L 11.0,6.6 L 11.3,3.1 L 13.1,2.5 L 15.4,5.1 Z" Fill="Transparent" Stroke="#FFFFFF" StrokeThickness="1" StrokeJoin="Round" Opacity="0.55">
+                                                <Path.RenderTransform>
+                                                    <TranslateTransform X="-1" Y="-1" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                            <Ellipse Canvas.Left="10" Canvas.Top="10" Width="14" Height="14" Fill="#F4F7FA" Stroke="#17211C" StrokeThickness="2.3" />                                        
                                     </Canvas>
                                 </Canvas>
                             </Viewbox>

@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -28,6 +29,10 @@ namespace AvaloniaFirmwareUpdater;
  */
 public partial class MainWindow : Window
 {
+    private const string AutoFindComPortOption = "Auto find";
+    private const int BroadcastBoardAddress = 0x00;
+    private const int DefaultBoardAddress = 0xB1;
+    private const int MaxCommLogLinesPerRead = 200;
     private const int MaxLogLines = 700;
     private const int MaxWatchdogSeconds = 3600;
     private const double DrivenGearMeshPhaseDegrees = 15;
@@ -40,7 +45,12 @@ public partial class MainWindow : Window
     private const double SmallGearCenter = 17;
 
     private readonly DispatcherTimer boardAddressReloadTimer;
-    private readonly StringBuilder debugText = new();
+    private readonly DispatcherTimer commLogTailTimer;
+    private readonly AppSettings loadedSettings = AppSettingsStore.Load();
+    private readonly MainWindowViewModel viewModel = new();
+    private readonly StringBuilder bothLogText = new();
+    private readonly StringBuilder commLogText = new();
+    private readonly StringBuilder localLogText = new();
     private readonly RotateTransform hiddenLargeGearTransform = new() { CenterX = LargeGearCenter, CenterY = LargeGearCenter };
     private readonly RotateTransform hiddenMediumGearTransform = new() { CenterX = MediumGearCenter, CenterY = MediumGearCenter };
     private readonly TranslateTransform hiddenProgressPulseTransform = new() { X = -140 };
@@ -55,10 +65,14 @@ public partial class MainWindow : Window
     private FileSystemWatcher? boardAddressWatcher;
     private IReadOnlyList<BoardAddressOption> boardAddresses = [];
     private CancellationTokenSource? updateCancellationSource;
+    private long commLogReadOffset;
     private double gearAngle;
     private bool logsVisible = true;
+    private bool initializationComplete;
     private double progressPulseOffset = -140;
     private AcpFirmwareUpdate? runningUpdater;
+    private string? activeCommLogPath;
+    private string? pendingCommLogPort;
     private bool updateCancelled;
     private Stopwatch? updateStopwatch;
     private bool updateRunning;
@@ -71,7 +85,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DataContext = viewModel;
         InitializeProgressAnimationTransforms();
+        viewModel.LoadSettings(loadedSettings);
 
         updateClockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         updateClockTimer.Tick += (_, _) => UpdateTimeFields();
@@ -86,14 +102,25 @@ public partial class MainWindow : Window
             ReloadBoardAddressesFromJson();
         };
 
-        SetBoardAddresses(BoardAddressStore.LoadOrCreate(AppendLog), null);
+        commLogTailTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        commLogTailTimer.Tick += (_, _) => ReadNewCommLogLines();
+
+        SetBoardAddresses(BoardAddressStore.LoadOrCreate(AppendLog), loadedSettings.LastBoardAddress);
+        RefreshComPorts();
+        ApplyLoadedSettingsToControls();
         StartBoardAddressWatcher();
-        Closed += (_, _) => DisposeWatchers();
+        Closed += (_, _) =>
+        {
+            SaveCurrentSettings();
+            DisposeWatchers();
+        };
 
         SetStatus(AppStatus.Ready, "Ready");
         SetProgress(0, "Ready");
+        SyncViewModelToUi();
         UpdateTimeFields();
         AppendLog("Ready.");
+        initializationComplete = true;
     }
 
     private async void BrowseButton_Click(object? sender, RoutedEventArgs e)
@@ -132,13 +159,37 @@ public partial class MainWindow : Window
         }
 
         FirmwarePathTextBox.Text = selectedPath;
+        viewModel.FirmwarePath = selectedPath;
         SetFirmwareAttention(false);
+        SaveCurrentSettings();
+        SyncViewModelToUi();
         AppendLog($"Firmware selected: {selectedPath}");
     }
 
     private void BoardAddressComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         UpdateSelectedBoardPreview();
+        SaveCurrentSettings();
+        SyncViewModelToUi();
+    }
+
+    private void ComPortComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        viewModel.SelectedComPort = GetSelectedComPort();
+        SaveCurrentSettings();
+        SyncViewModelToUi();
+    }
+
+    private void ComPortComboBox_DropDownOpened(object? sender, EventArgs e)
+    {
+        RefreshComPorts();
+    }
+
+    private void WatchdogNumericUpDown_ValueChanged(object? sender, NumericUpDownValueChangedEventArgs e)
+    {
+        viewModel.WatchdogSeconds = GetWatchdogSeconds();
+        SaveCurrentSettings();
+        SyncViewModelToUi();
     }
 
     private async void StartButton_Click(object? sender, RoutedEventArgs e)
@@ -169,28 +220,55 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (boardAddress.Address == BroadcastBoardAddress)
+        {
+            SetStatus(AppStatus.Warning, "Select board");
+            SetProgress(0, "Select board");
+            AppendLog("Error: Broadcast #0x00 cannot be used for firmware update. Select the target board, for example EDB #0xB1.");
+            return;
+        }
+
         var watchdogSeconds = GetWatchdogSeconds();
         var watchdogMilliseconds = watchdogSeconds * 1000;
+        var selectedComPort = GetSelectedComPort();
+        var cancellationTokenSource = new CancellationTokenSource();
+        viewModel.FirmwarePath = firmwarePath;
+        viewModel.SelectedBoard = boardAddress;
+        viewModel.SelectedComPort = selectedComPort;
+        viewModel.WatchdogSeconds = watchdogSeconds;
+        viewModel.ResultSummary = "Update is running.";
+        viewModel.Phase = UpdatePhase.Preflight;
+        SaveCurrentSettings();
+        SyncViewModelToUi();
 
         BeginTiming();
         SetBusy(true);
         SetStatus(AppStatus.Running, "Updating");
         SetProgress(0, "Starting update");
+        AppendLog("Pre-flight summary:");
+        AppendLog(viewModel.PreflightSummary);
+        if (viewModel.CompatibilitySummary.StartsWith("Compatibility warning:", StringComparison.OrdinalIgnoreCase))
+        {
+            AppendLog($"Warning: {viewModel.CompatibilitySummary["Compatibility warning: ".Length..]}");
+        }
         AppendLog($"Starting update for {boardAddress.DisplayName} {boardAddress.Hex}.");
         AppendLog($"Firmware file: {firmwarePath}");
+        AppendLog(selectedComPort is not null
+            ? $"Communication port: {selectedComPort}"
+            : "Communication port: auto find");
         AppendLog(watchdogSeconds > 0
             ? $"Watchdog interval: {watchdogSeconds}s"
             : "Watchdog interval: disabled");
 
         var succeeded = false;
         updateCancelled = false;
-        updateCancellationSource = new CancellationTokenSource();
+        updateCancellationSource = cancellationTokenSource;
         runningUpdater = new AcpFirmwareUpdate(AppendLog, ReportProgress);
 
         try
         {
-            succeeded = await Task.Run(() => RunFirmwareUpdate(firmwarePath, boardAddress.Address, watchdogMilliseconds, updateCancellationSource.Token));
-            updateCancelled = updateCancelled || updateCancellationSource.IsCancellationRequested || runningUpdater.WasCancelled;
+            succeeded = await Task.Run(() => RunFirmwareUpdate(firmwarePath, boardAddress.Address, watchdogMilliseconds, selectedComPort, cancellationTokenSource.Token));
+            updateCancelled = updateCancelled || cancellationTokenSource.IsCancellationRequested || runningUpdater.WasCancelled;
         }
         catch (Exception ex)
         {
@@ -200,7 +278,7 @@ public partial class MainWindow : Window
         {
             FinishTiming();
             SetBusy(false);
-            updateCancellationSource.Dispose();
+            cancellationTokenSource.Dispose();
             updateCancellationSource = null;
             runningUpdater = null;
         }
@@ -209,6 +287,9 @@ public partial class MainWindow : Window
         {
             SetStatus(AppStatus.Complete, "Complete");
             SetProgress(100, "Update complete");
+            viewModel.Phase = UpdatePhase.Complete;
+            viewModel.ResultSummary = $"Complete in {FormatElapsed(updateStopwatch?.Elapsed ?? TimeSpan.Zero)}.";
+            SyncViewModelToUi();
             AppendLog($"Programming time: {FormatElapsed(updateStopwatch?.Elapsed ?? TimeSpan.Zero)}");
             return;
         }
@@ -217,12 +298,18 @@ public partial class MainWindow : Window
         {
             SetStatus(AppStatus.Cancelled, "Cancelled");
             SetProgress((int)UpdateProgressBar.Value, "Cancelled");
+            viewModel.Phase = UpdatePhase.Cancelled;
+            viewModel.ResultSummary = $"Cancelled after {FormatElapsed(updateStopwatch?.Elapsed ?? TimeSpan.Zero)}.";
+            SyncViewModelToUi();
             AppendLog($"Update cancelled after {FormatElapsed(updateStopwatch?.Elapsed ?? TimeSpan.Zero)}");
             return;
         }
 
         SetStatus(AppStatus.Failed, "Failed");
         SetProgress((int)UpdateProgressBar.Value, "Failed");
+        viewModel.Phase = UpdatePhase.Failed;
+        viewModel.ResultSummary = $"Failed after {FormatElapsed(updateStopwatch?.Elapsed ?? TimeSpan.Zero)}.";
+        SyncViewModelToUi();
     }
 
     private void CancelButton_Click(object? sender, RoutedEventArgs e)
@@ -234,9 +321,13 @@ public partial class MainWindow : Window
 
         updateCancelled = true;
         CancelButton.IsEnabled = false;
+        CancelButton.Content = "Cancelling";
+        viewModel.Phase = UpdatePhase.Cancelling;
+        viewModel.ResultSummary = "Cancel requested; waiting for the active firmware command to finish safely.";
         SetStatus(AppStatus.Cancelling, "Cancelling");
         SetProgress((int)UpdateProgressBar.Value, "Cancelling");
         AppendLog("Cancelling update; communication port will be disconnected safely.");
+        SyncViewModelToUi();
 
         updateCancellationSource?.Cancel();
         runningUpdater?.Cancel();
@@ -244,8 +335,26 @@ public partial class MainWindow : Window
 
     private void ClearLogButton_Click(object? sender, RoutedEventArgs e)
     {
-        debugText.Clear();
-        DebugLogStackPanel.Children.Clear();
+        localLogText.Clear();
+        commLogText.Clear();
+        bothLogText.Clear();
+        LocalLogStackPanel.Children.Clear();
+        CommLogStackPanel.Children.Clear();
+        BothLocalLogStackPanel.Children.Clear();
+        BothCommLogStackPanel.Children.Clear();
+    }
+
+    private void ExportLogButton_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var exportPath = ExportLogBundle();
+            AppendLog($"Log bundle exported: {exportPath}");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Error: Failed to export log bundle. {ex.Message}");
+        }
     }
 
     private async void CopyLogButton_Click(object? sender, RoutedEventArgs e)
@@ -257,17 +366,25 @@ public partial class MainWindow : Window
             return;
         }
 
-        await topLevel.Clipboard.SetTextAsync(debugText.ToString());
+        await topLevel.Clipboard.SetTextAsync(GetSelectedLogText());
         AppendLog("Debug log copied to clipboard.");
     }
 
     private void LogVisibilityButton_Click(object? sender, RoutedEventArgs e)
     {
         logsVisible = !logsVisible;
+        viewModel.LogsVisible = logsVisible;
+        ApplyLogVisibility();
+        SaveCurrentSettings();
+    }
+
+    private void ApplyLogVisibility()
+    {
         DebugLogBody.IsVisible = logsVisible;
         ProgressStrip.IsVisible = logsVisible;
         ProgressOnlyBody.IsVisible = !logsVisible;
         CopyLogButton.IsVisible = logsVisible;
+        ExportLogButton.IsVisible = logsVisible;
         DebugTitleText.Text = logsVisible ? "Debug output" : "Update progress";
         DebugSubtitleText.Text = logsVisible ? "Live updater diagnostics" : "Debug output is hidden";
         LogVisibilityButton.Content = logsVisible ? "Hide logs" : "Show logs";
@@ -280,14 +397,121 @@ public partial class MainWindow : Window
      * @param watchdogMilliseconds Watchdog interval in milliseconds.
      * @return True when the update completes and verifies.
      */
-    private bool RunFirmwareUpdate(string firmwarePath, int boardAddress, int watchdogMilliseconds, CancellationToken cancellationToken)
+    private bool RunFirmwareUpdate(string firmwarePath, int boardAddress, int watchdogMilliseconds, string? commPortName, CancellationToken cancellationToken)
     {
         if (runningUpdater is null)
         {
             return false;
         }
 
-        return runningUpdater.UpdateFirmware(firmwarePath, boardAddress, watchdogMilliseconds, cancellationToken);
+        return runningUpdater.UpdateFirmware(firmwarePath, boardAddress, watchdogMilliseconds, commPortName, cancellationToken);
+    }
+
+    private void ApplyLoadedSettingsToControls()
+    {
+        if (!string.IsNullOrWhiteSpace(viewModel.FirmwarePath))
+        {
+            FirmwarePathTextBox.Text = viewModel.FirmwarePath;
+        }
+
+        WatchdogNumericUpDown.Value = viewModel.WatchdogSeconds;
+        logsVisible = viewModel.LogsVisible;
+
+        if (!string.IsNullOrWhiteSpace(viewModel.SelectedComPort))
+        {
+            var ports = (ComPortComboBox.ItemsSource as IEnumerable<string>) ?? [];
+            ComPortComboBox.SelectedItem = ports.Contains(viewModel.SelectedComPort, StringComparer.OrdinalIgnoreCase)
+                ? ports.First(port => string.Equals(port, viewModel.SelectedComPort, StringComparison.OrdinalIgnoreCase))
+                : AutoFindComPortOption;
+        }
+
+        ApplyLogVisibility();
+        SyncViewModelToUi();
+    }
+
+    private void SaveCurrentSettings()
+    {
+        if (!initializationComplete)
+        {
+            return;
+        }
+
+        viewModel.FirmwarePath = FirmwarePathTextBox.Text?.Trim();
+        viewModel.SelectedBoard = GetSelectedBoardAddress();
+        viewModel.SelectedComPort = GetSelectedComPort();
+        viewModel.WatchdogSeconds = GetWatchdogSeconds();
+        viewModel.LogsVisible = logsVisible;
+
+        try
+        {
+            AppSettingsStore.Save(viewModel.CreateSettings());
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to save settings: {ex.Message}");
+        }
+    }
+
+    private void SyncViewModelToUi()
+    {
+        PreflightSummaryText.Text = viewModel.PreflightSummary;
+        CompatibilitySummaryText.Text = viewModel.CompatibilitySummary;
+        CompatibilitySummaryText.Foreground = viewModel.CompatibilitySummary.StartsWith("Compatibility warning:", StringComparison.OrdinalIgnoreCase)
+            ? Brush.Parse("#B86B00")
+            : Brush.Parse("#69736D");
+        ResultSummaryText.Text = viewModel.ResultSummary;
+    }
+
+    private string ExportLogBundle()
+    {
+        var exportDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "AcpFirmwareUpdater",
+            "LogExports");
+        Directory.CreateDirectory(exportDirectory);
+
+        var exportPath = Path.Combine(exportDirectory, $"FirmwareUpdate_{DateTime.Now:yyyyMMdd_HHmmss}.zip");
+        using var archive = ZipFile.Open(exportPath, ZipArchiveMode.Create);
+
+        AddZipEntry(archive, "LocalLogs.txt", localLogText.ToString());
+        AddZipEntry(archive, "CommLogs.txt", commLogText.ToString());
+        AddZipEntry(archive, "BothLogs.txt", bothLogText.ToString());
+        AddZipEntry(archive, "Summary.txt", CreateLogBundleSummary());
+
+        if (File.Exists(AppSettingsStore.SettingsPath))
+        {
+            archive.CreateEntryFromFile(AppSettingsStore.SettingsPath, "settings.json");
+        }
+
+        return exportPath;
+    }
+
+    private string CreateLogBundleSummary()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("ACP Firmware Updater log bundle");
+        builder.AppendLine($"Created: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        builder.AppendLine();
+        builder.AppendLine("Pre-flight");
+        builder.AppendLine(viewModel.PreflightSummary);
+        builder.AppendLine(viewModel.CompatibilitySummary);
+        builder.AppendLine();
+        builder.AppendLine("Result");
+        builder.AppendLine(viewModel.ResultSummary);
+        builder.AppendLine();
+        builder.AppendLine($"Status: {StatusText.Text}");
+        builder.AppendLine(StartTimeText.Text);
+        builder.AppendLine(ElapsedTimeText.Text);
+        builder.AppendLine(FinishTimeText.Text);
+        return builder.ToString();
+    }
+
+    private static void AddZipEntry(ZipArchive archive, string name, string content)
+    {
+        var entry = archive.CreateEntry(name);
+        using var stream = entry.Open();
+        using var writer = new StreamWriter(stream, Encoding.UTF8);
+        writer.Write(content);
     }
 
     private void SetBoardAddresses(IReadOnlyList<BoardAddressOption> addresses, int? preferredAddress)
@@ -362,6 +586,7 @@ public partial class MainWindow : Window
         progressAnimationTimer.Stop();
         updateClockTimer.Stop();
         boardAddressReloadTimer.Stop();
+        commLogTailTimer.Stop();
     }
 
     private void UpdateSelectedBoardPreview()
@@ -370,22 +595,32 @@ public partial class MainWindow : Window
         {
             HexAddressTextBox.Text = string.Empty;
             SelectedTargetText.Text = "No board selected";
+            viewModel.SelectedBoard = null;
             return;
         }
 
         HexAddressTextBox.Text = selected.Hex;
         SelectedTargetText.Text = $"{selected.DisplayName} {selected.Hex}";
+        viewModel.SelectedBoard = selected;
     }
 
     private void SetBusy(bool isBusy)
     {
         updateRunning = isBusy;
+        viewModel.IsBusy = isBusy;
         StartButton.IsEnabled = !isBusy;
         CancelButton.IsEnabled = isBusy;
+        CancelButton.Content = "Cancel";
         BrowseButton.IsEnabled = !isBusy;
         BoardAddressComboBox.IsEnabled = !isBusy;
+        ComPortComboBox.IsEnabled = !isBusy;
         WatchdogNumericUpDown.IsEnabled = !isBusy;
         SetProgressAnimation(isBusy);
+
+        if (!isBusy)
+        {
+            StopCommLogTail();
+        }
     }
 
     private void SetStatus(AppStatus status, string text)
@@ -544,7 +779,9 @@ public partial class MainWindow : Window
     {
         void Update()
         {
+            viewModel.Phase = InferPhase(text);
             SetProgress(percent, text);
+            SyncViewModelToUi();
         }
 
         if (Dispatcher.UIThread.CheckAccess())
@@ -569,6 +806,55 @@ public partial class MainWindow : Window
         HiddenProgressStateText.Text = text;
     }
 
+    private static UpdatePhase InferPhase(string text)
+    {
+        if (text.Contains("loading", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("loaded", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("checking firmware", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.LoadingFirmware;
+        }
+
+        if (text.Contains("searching", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("scan", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("trying comport", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.ScanningPort;
+        }
+
+        if (text.Contains("reboot", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.Rebooting;
+        }
+
+        if (text.Contains("eras", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.Erasing;
+        }
+
+        if (text.Contains("program", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.Programming;
+        }
+
+        if (text.Contains("verify", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.Verifying;
+        }
+
+        if (text.Contains("final", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.Finalising;
+        }
+
+        if (text.Contains("complete", StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdatePhase.Complete;
+        }
+
+        return UpdatePhase.Preflight;
+    }
+
     private string? GetValidatedFirmwarePath()
     {
         var firmwarePath = FirmwarePathTextBox.Text?.Trim();
@@ -584,6 +870,36 @@ public partial class MainWindow : Window
     private BoardAddressOption? GetSelectedBoardAddress()
     {
         return BoardAddressComboBox.SelectedItem as BoardAddressOption;
+    }
+
+    private string? GetSelectedComPort()
+    {
+        var selected = ComPortComboBox.SelectedItem as string;
+        return string.IsNullOrWhiteSpace(selected) || selected == AutoFindComPortOption ? null : selected;
+    }
+
+    private void RefreshComPorts()
+    {
+        var selected = ComPortComboBox.SelectedItem as string;
+        var ports = new[] { AutoFindComPortOption }
+            .Concat(AcpFirmwareUpdate.GetAvailableCommPortNames())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        ComPortComboBox.ItemsSource = ports;
+        ComPortComboBox.SelectedItem = !string.IsNullOrWhiteSpace(selected) && ports.Contains(selected, StringComparer.OrdinalIgnoreCase)
+            ? ports.First(port => string.Equals(port, selected, StringComparison.OrdinalIgnoreCase))
+            : AutoFindComPortOption;
+    }
+
+    private string GetSelectedLogText()
+    {
+        return LogTabControl.SelectedIndex switch
+        {
+            1 => commLogText.ToString(),
+            2 => bothLogText.ToString(),
+            _ => localLogText.ToString()
+        };
     }
 
     private int GetWatchdogSeconds()
@@ -628,7 +944,12 @@ public partial class MainWindow : Window
 
             foreach (var line in lines)
             {
-                AddLogLine(timestamp, line);
+                var fullLine = $"[{timestamp}] {line}";
+                var severity = ClassifyLog(line);
+
+                AddLogLine(LocalLogStackPanel, localLogText, fullLine, severity);
+                AddLogLine(BothLocalLogStackPanel, bothLogText, fullLine, severity);
+                TryStartCommLogTailFromLocalLog(line);
             }
 
             TrimLogLines();
@@ -644,12 +965,28 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.Post(Append);
     }
 
-    private void AddLogLine(string timestamp, string message)
+    private void AppendCommLog(string message)
     {
-        var severity = ClassifyLog(message);
-        var fullLine = $"[{timestamp}] {message}";
+        var normalized = message.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length > MaxCommLogLinesPerRead)
+        {
+            lines = lines[^MaxCommLogLinesPerRead..];
+        }
 
-        debugText.AppendLine(fullLine);
+        foreach (var line in lines)
+        {
+            AddLogLine(CommLogStackPanel, commLogText, line, LogSeverity.Comms);
+            AddLogLine(BothCommLogStackPanel, bothLogText, line, LogSeverity.Comms);
+        }
+
+        TrimLogLines();
+        ScrollLogsToEnd();
+    }
+
+    private void AddLogLine(StackPanel targetPanel, StringBuilder targetText, string fullLine, LogSeverity severity)
+    {
+        targetText.AppendLine(fullLine);
 
         var line = new SelectableTextBlock
         {
@@ -661,7 +998,7 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 0, 0, 2)
         };
 
-        DebugLogStackPanel.Children.Add(line);
+        targetPanel.Children.Add(line);
     }
 
     private static LogSeverity ClassifyLog(string message)
@@ -696,15 +1033,24 @@ public partial class MainWindow : Window
             LogSeverity.Warning => Brush.Parse("#FFD451"),
             LogSeverity.Error => Brush.Parse("#FF6B5A"),
             LogSeverity.Success => Brush.Parse("#65E38D"),
+            LogSeverity.Comms => Brush.Parse("#9FD7FF"),
             _ => Brush.Parse("#DCE7E1")
         };
     }
 
     private void TrimLogLines()
     {
-        while (DebugLogStackPanel.Children.Count > MaxLogLines)
+        TrimLogPanel(LocalLogStackPanel);
+        TrimLogPanel(CommLogStackPanel);
+        TrimLogPanel(BothLocalLogStackPanel);
+        TrimLogPanel(BothCommLogStackPanel);
+    }
+
+    private static void TrimLogPanel(StackPanel panel)
+    {
+        while (panel.Children.Count > MaxLogLines)
         {
-            DebugLogStackPanel.Children.RemoveAt(0);
+            panel.Children.RemoveAt(0);
         }
     }
 
@@ -712,10 +1058,151 @@ public partial class MainWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            DebugLogScrollViewer.Offset = new Vector(
-                DebugLogScrollViewer.Offset.X,
-                DebugLogScrollViewer.Extent.Height);
+            ScrollViewerToEnd(LocalLogScrollViewer);
+            ScrollViewerToEnd(CommLogScrollViewer);
+            ScrollViewerToEnd(BothLocalLogScrollViewer);
+            ScrollViewerToEnd(BothCommLogScrollViewer);
         }, DispatcherPriority.Background);
+    }
+
+    private static void ScrollViewerToEnd(ScrollViewer scrollViewer)
+    {
+        scrollViewer.Offset = new Vector(scrollViewer.Offset.X, scrollViewer.Extent.Height);
+    }
+
+    private void TryStartCommLogTailFromLocalLog(string line)
+    {
+        const string detectedOnMarker = "detected on:";
+
+        var markerIndex = line.IndexOf(detectedOnMarker, StringComparison.OrdinalIgnoreCase);
+        var markerLength = detectedOnMarker.Length;
+
+        if (markerIndex < 0)
+        {
+            return;
+        }
+
+        var commPort = line[(markerIndex + markerLength)..].Trim();
+        if (!string.IsNullOrWhiteSpace(commPort))
+        {
+            StartCommLogTail(commPort);
+        }
+    }
+
+    private void StartCommLogTail(string commPort)
+    {
+        var commLogsDirectory = Path.Combine(AppContext.BaseDirectory, "CommLogs");
+        if (!Directory.Exists(commLogsDirectory))
+        {
+            AppendCommLog($"CommLogs folder not found yet: {commLogsDirectory}");
+            pendingCommLogPort = commPort;
+            activeCommLogPath = null;
+            commLogReadOffset = 0;
+            commLogTailTimer.Start();
+            return;
+        }
+
+        var logPath = Directory
+            .EnumerateFiles(commLogsDirectory, $"{commPort}_*.txt")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+
+        if (logPath is null)
+        {
+            AppendCommLog($"Waiting for comm log file for {commPort}.");
+            pendingCommLogPort = commPort;
+            activeCommLogPath = null;
+            commLogReadOffset = 0;
+            commLogTailTimer.Start();
+            return;
+        }
+
+        if (string.Equals(activeCommLogPath, logPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        pendingCommLogPort = null;
+        activeCommLogPath = logPath;
+        commLogReadOffset = new FileInfo(logPath).Length;
+        AppendCommLog($"Following {Path.GetFileName(logPath)}");
+        commLogTailTimer.Start();
+    }
+
+    private void StopCommLogTail()
+    {
+        ReadNewCommLogLines();
+        commLogTailTimer.Stop();
+        activeCommLogPath = null;
+        pendingCommLogPort = null;
+        commLogReadOffset = 0;
+    }
+
+    private void ReadNewCommLogLines()
+    {
+        if (activeCommLogPath is null)
+        {
+            if (pendingCommLogPort is not null)
+            {
+                TryAttachPendingCommLog();
+            }
+
+            return;
+        }
+
+        try
+        {
+            using var stream = new FileStream(activeCommLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (commLogReadOffset > stream.Length)
+            {
+                commLogReadOffset = 0;
+            }
+
+            stream.Seek(commLogReadOffset, SeekOrigin.Begin);
+            using var reader = new StreamReader(stream, Encoding.UTF8, true, leaveOpen: true);
+            var text = reader.ReadToEnd();
+            commLogReadOffset = stream.Position;
+
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                AppendCommLog(text);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private void TryAttachPendingCommLog()
+    {
+        if (pendingCommLogPort is null)
+        {
+            return;
+        }
+
+        var commLogsDirectory = Path.Combine(AppContext.BaseDirectory, "CommLogs");
+        if (!Directory.Exists(commLogsDirectory))
+        {
+            return;
+        }
+
+        var logPath = Directory
+            .EnumerateFiles(commLogsDirectory, $"{pendingCommLogPort}_*.txt")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+
+        if (logPath is null)
+        {
+            return;
+        }
+
+        activeCommLogPath = logPath;
+        pendingCommLogPort = null;
+        commLogReadOffset = new FileInfo(logPath).Length;
+        AppendCommLog($"Following {Path.GetFileName(logPath)}");
     }
 
     private enum AppStatus
@@ -734,6 +1221,7 @@ public partial class MainWindow : Window
         Information,
         Warning,
         Error,
-        Success
+        Success,
+        Comms
     }
 }

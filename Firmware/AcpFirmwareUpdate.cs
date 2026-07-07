@@ -6,8 +6,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using static AcpCore.AcpFramework;
@@ -21,14 +23,21 @@ namespace AcpFirmwareUpdater
     internal class AcpFirmwareUpdate
     {
         private const double programmingTimeout = 10000 * 60 * 120;
-        private const int ProgrammingEndPercent = 86;
+        private const int BoardDetectScanAttempts = 2;
+        private const int BoardDetectProbeAttempts = 2;
+        private const int BoardDetectProbeTimeoutMs = 350;
+        private const int BoardDetectScanRetryDelayMs = 500;
+        private const int PortOpenSettleDelayMs = 150;
+        private const int FirmwareVersionReadAttempts = 4;
+        private const int ResponseDrainDelayMs = 120;
         private const long ProgrammingPacketBytes = 64;
-        private const int ProgrammingStartPercent = 55;
         private const int PmbAddress = 0x41;
         private const int PmuAddress = 0xA1;
         private readonly Action<string> log;
         private readonly object portLock = new();
         private readonly Action<int, string> progress;
+        private static readonly FieldInfo? FirmwareFlashAddressField = typeof(AcpFramework).GetField("m_intFlashAddress", BindingFlags.Static | BindingFlags.NonPublic);
+        private static readonly FieldInfo? FirmwareImageField = typeof(AcpFramework).GetField("m_arrFirmware", BindingFlags.Static | BindingFlags.NonPublic);
         private IAcpCommPort? activeCommPort;
         private bool cancellationLogged;
         private int currentProgressPercent;
@@ -62,7 +71,7 @@ namespace AcpFirmwareUpdater
          * @param cancellationToken Token used by the UI cancel button.
          * @return True if the board reports the new firmware version after reboot.
          */
-        internal bool UpdateFirmware(string firmwareFilename, int boardAddress, int watchdogInterval, CancellationToken cancellationToken = default)
+        internal bool UpdateFirmware(string firmwareFilename, int boardAddress, int watchdogInterval, string? commPortName = null, CancellationToken cancellationToken = default)
         {
             IAcpCommPort acpCommPort;
             string fileVersion;
@@ -81,20 +90,30 @@ namespace AcpFirmwareUpdater
 
             var firmwareFileSize = new FileInfo(firmwareFilename).Length;
 
-            if (!GetFirmwareVersionFromFile(firmwareFilename, out fileVersion))
+            log($"Loading firmware file: {FormatBytes(firmwareFileSize)}");
+            ReportProgress(4, "Loading firmware file");
+            if (!InitiateFirmwareUpdate(firmwareFilename))
+            {
+                log($"Error: Failed to load firmware file '{firmwareFilename}'");
+                return false;
+            }
+
+            if (!GetFirmwareVersionFromLoadedImage(out fileVersion))
             {
                 log($"Error: {firmwareFilename} is invalid firmware file");
                 return false;
             }
 
             ReportProgress(8, "Firmware file loaded");
+            log($"Firmware file loaded: v{fileVersion}, {FormatBytes(firmwareFileSize)}");
             if (StopIfCancelled(cancellationToken))
             {
                 return false;
             }
 
+            log("Preparing communication scan.");
             ReportProgress(12, "Searching for board");
-            if (!DetectBoard(boardAddress, cancellationToken, out acpCommPort))
+            if (!DetectBoard(boardAddress, commPortName, cancellationToken, out acpCommPort))
             {
                 if (WasCancelled)
                 {
@@ -151,7 +170,7 @@ namespace AcpFirmwareUpdater
                 log($"Board currently using firmware version v{boardVersion}");
 
 
-                if (fileVersion == boardVersion)
+                if (VersionsMatch(fileVersion, boardVersion))
                 {
                     log($"Warning: The board at address {boardAddressInHex} is already running v{fileVersion}");
                     ReportProgress(100, "Firmware already installed");
@@ -167,13 +186,6 @@ namespace AcpFirmwareUpdater
                     return false;
                 }
 
-                if (!InitiateFirmwareUpdate(firmwareFilename))
-                {
-                    log($"Error: Failed to initiate the update to board at address {boardAddressInHex}");
-                    return false;
-                }
-
-                
                 if (!ApplyFirmwareUpdate(acpCommPort, boardAddress, watchdogInterval, firmwareFileSize, cancellationToken))
                 {
                     return false;
@@ -208,7 +220,7 @@ namespace AcpFirmwareUpdater
                     return false;
                 }
 
-                if (fileVersion != boardVersion)
+                if (!VersionsMatch(fileVersion, boardVersion))
                 {
                     log($"Error: The firmware version on board at address {boardAddressInHex} is v{boardVersion}, not v{fileVersion}");
                     return false;
@@ -258,6 +270,11 @@ namespace AcpFirmwareUpdater
             AcpResultCode? lastResultCode = null;
             var lastProgrammingPercent = -1;
             long writtenBytes = 0;
+            var actualFirmwareSize = GetFirmwareImageSize();
+            if (actualFirmwareSize <= 0)
+            {
+                actualFirmwareSize = firmwareFileSize;
+            }
 
             while (!programmingTimer.Expired())
             {
@@ -287,31 +304,42 @@ namespace AcpFirmwareUpdater
                         if (resultChanged)
                         {
                             log("Erasing flash");
-                            ReportProgress(55, "Erasing flash");
+                            ReportProgress(0, "Erasing flash");
                         }
                         break;
 
                     case AcpResultCode.FirmwareProgramming:
-                        writtenBytes = Math.Min(firmwareFileSize, writtenBytes + ProgrammingPacketBytes);
+                        if (TryGetFirmwareProgress(out var flashAddress, out var firmwareImageSize))
+                        {
+                            actualFirmwareSize = firmwareImageSize;
+                            writtenBytes = Math.Min(firmwareImageSize, flashAddress);
+                        }
+                        else
+                        {
+                            writtenBytes = Math.Min(actualFirmwareSize, writtenBytes + ProgrammingPacketBytes);
+                        }
 
-                        var programmingPercent = CalculateProgrammingPercent(writtenBytes, firmwareFileSize);
+                        var programmingPercent = CalculateProgrammingPercent(writtenBytes, actualFirmwareSize);
                         if (resultChanged || programmingPercent != lastProgrammingPercent)
                         {
                             lastProgrammingPercent = programmingPercent;
-                            ReportProgress(programmingPercent, $"Programming firmware {FormatBytes(writtenBytes)} / {FormatBytes(firmwareFileSize)}");
+                            var progressText = writtenBytes >= actualFirmwareSize
+                                ? "Finalising firmware transfer"
+                                : $"Programming firmware {FormatBytes(writtenBytes)} / {FormatBytes(actualFirmwareSize)}";
+                            ReportProgress(programmingPercent, progressText);
                         }
                         break;
 
                     case AcpResultCode.FirmwareVerifing:
                         if (resultChanged)
                         {
-                            ReportProgress(86, "Verifying firmware");
+                            ReportProgress(100, "Verifying firmware");
                         }
                         break;
 
                     case AcpResultCode.FirmwareComplete:
                         log("Firmware update complete");
-                        ReportProgress(90, "Firmware transfer complete");
+                        ReportProgress(100, "Firmware transfer complete");
                         return true;
 
                     case AcpResultCode.ErrorPacketSizeExceeded:
@@ -412,13 +440,35 @@ namespace AcpFirmwareUpdater
         {
             if (firmwareFileSize <= 0)
             {
-                return ProgrammingStartPercent;
+                return 0;
             }
 
             var progressRatio = Math.Clamp((double)writtenBytes / firmwareFileSize, 0, 1);
-            var programmingRange = ProgrammingEndPercent - ProgrammingStartPercent;
 
-            return ProgrammingStartPercent + (int)Math.Round(progressRatio * programmingRange);
+            return (int)Math.Round(progressRatio * 100);
+        }
+
+
+        private static long GetFirmwareImageSize()
+        {
+            return FirmwareImageField?.GetValue(null) is byte[] firmwareImage
+                ? firmwareImage.Length
+                : 0;
+        }
+
+
+        private static bool TryGetFirmwareProgress(out long flashAddress, out long firmwareImageSize)
+        {
+            flashAddress = 0;
+            firmwareImageSize = GetFirmwareImageSize();
+
+            if (firmwareImageSize <= 0 || FirmwareFlashAddressField?.GetValue(null) is not int currentFlashAddress)
+            {
+                return false;
+            }
+
+            flashAddress = Math.Clamp((long)currentFlashAddress, 0, firmwareImageSize);
+            return true;
         }
 
 
@@ -437,61 +487,154 @@ namespace AcpFirmwareUpdater
             return $"{bytes} B";
         }
 
-        private bool GetFirmwareVersionFromFile(string firmwareFilename, out string version)
+        private static bool GetFirmwareVersionFromLoadedImage(out string version)
         {
-            var firmwareInfo = AcpFirmwareVersion.ExtractFromFile(firmwareFilename);
-            version = firmwareInfo.strVersion;
-            return firmwareInfo.blnValid;
+            version = string.Empty;
+
+            if (FirmwareImageField?.GetValue(null) is not byte[] firmwareImage)
+            {
+                return false;
+            }
+
+            const string versionTag = "####";
+            var versionBytes = ExtractTaggedBytes(firmwareImage, versionTag, versionTag);
+            if (versionBytes.Length == 0)
+            {
+                return false;
+            }
+
+            version = Regex.Replace(Encoding.UTF8.GetString(versionBytes), @"[^0-9.,]", "");
+            return !string.IsNullOrWhiteSpace(version);
         }
 
-        private bool DetectBoard(int boardAddress, CancellationToken cancellationToken, out IAcpCommPort acpCommPort)
+
+        private static byte[] ExtractTaggedBytes(byte[] source, string startTag, string endTag)
+        {
+            var startPattern = Encoding.ASCII.GetBytes(startTag);
+            var endPattern = Encoding.ASCII.GetBytes(endTag);
+            var startIndex = IndexOf(source, startPattern, 0);
+            if (startIndex < 0)
+            {
+                return [];
+            }
+
+            var valueStart = startIndex + startPattern.Length;
+            var endIndex = IndexOf(source, endPattern, valueStart);
+            if (endIndex <= valueStart)
+            {
+                return [];
+            }
+
+            var result = new byte[endIndex - valueStart];
+            Array.Copy(source, valueStart, result, 0, result.Length);
+            return result;
+        }
+
+
+        private static int IndexOf(byte[] source, byte[] pattern, int startIndex)
+        {
+            if (pattern.Length == 0 || startIndex >= source.Length)
+            {
+                return -1;
+            }
+
+            for (var index = Math.Max(0, startIndex); index <= source.Length - pattern.Length; index++)
+            {
+                var found = true;
+                for (var patternIndex = 0; patternIndex < pattern.Length; patternIndex++)
+                {
+                    if (source[index + patternIndex] != pattern[patternIndex])
+                    {
+                        found = false;
+                        break;
+                    }
+                }
+
+                if (found)
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        private bool DetectBoard(int boardAddress, string? commPortName, CancellationToken cancellationToken, out IAcpCommPort acpCommPort)
         {
             acpCommPort = null;
 
             try
             {
-                var commPorts = GetCommPortNames();
+                var commPorts = string.IsNullOrWhiteSpace(commPortName)
+                    ? GetCommPortNames()
+                    : new[] { commPortName.Trim() };
 
-                // Check each serial port for a PMU (unique to SideA)
-                foreach (string commPort in commPorts)
+                log($"Scanning {commPorts.Length} communication port(s).");
+
+                for (var scanAttempt = 1; scanAttempt <= BoardDetectScanAttempts; scanAttempt++)
                 {
-                    if (StopIfCancelled(cancellationToken))
+                    if (scanAttempt > 1)
                     {
-                        return false;
-                    }
-
-                    acpCommPort = GetAcpCommPort(commPort);
-                    SetActiveCommPort(acpCommPort);
-
-                    log($"Trying comport: {commPort}");
-
-                    if (acpCommPort.Open(commPort) != AcpResultCode.Success)
-                    {
-                        DisconnectActiveCommPort(acpCommPort);
-                        continue;
-                    }
-
-                    if (StopIfCancelled(cancellationToken))
-                    {
-                        return false;
-                    }
-
-                    if (GetBoardId(acpCommPort, boardAddress, out var boardID, 3, 500) == AcpResultCode.Success)
-                    {
-                        if (!DetectedBoardMatchesSelection(boardID, boardAddress, commPort))
+                        log($"Retrying communication scan ({scanAttempt}/{BoardDetectScanAttempts}).");
+                        if (cancellationToken.WaitHandle.WaitOne(BoardDetectScanRetryDelayMs))
                         {
-                            DisconnectActiveCommPort(acpCommPort);
+                            StopIfCancelled(cancellationToken);
+                            return false;
+                        }
+                    }
+
+                    // Check each serial port for a PMU (unique to SideA)
+                    foreach (string commPort in commPorts)
+                    {
+                        if (StopIfCancelled(cancellationToken))
+                        {
                             return false;
                         }
 
-                        log($"Board at {FormatBoardAddress(boardAddress)}, detected on: {commPort}");
-                        acpCommPort.LogCommsEnable(true);
-                        return true;
-                    }
+                        acpCommPort = GetAcpCommPort(commPort);
+                        SetActiveCommPort(acpCommPort);
 
-                    // Not the right response, close the port and move onto the next one.
-                    DisconnectActiveCommPort(acpCommPort);
+                        log($"Trying comport: {commPort}");
+
+                        var openResult = acpCommPort.Open(commPort);
+                        if (openResult != AcpResultCode.Success)
+                        {
+                            log($"Warning: Could not open {commPort}: {openResult}");
+                            DisconnectActiveCommPort(acpCommPort);
+                            continue;
+                        }
+
+                        if (cancellationToken.WaitHandle.WaitOne(PortOpenSettleDelayMs))
+                        {
+                            StopIfCancelled(cancellationToken);
+                            return false;
+                        }
+
+                        if (StopIfCancelled(cancellationToken))
+                        {
+                            return false;
+                        }
+
+                        DrainPendingResponses(acpCommPort);
+
+                        if (GetBoardId(acpCommPort, boardAddress, out var boardID, BoardDetectProbeAttempts, BoardDetectProbeTimeoutMs) == AcpResultCode.Success)
+                        {
+                            if (!DetectedBoardMatchesSelection(boardID, boardAddress, commPort))
+                            {
+                                DisconnectActiveCommPort(acpCommPort);
+                                return false;
+                            }
+
+                            log($"Board at {FormatBoardAddress(boardAddress)}, detected on: {commPort}");
+                            acpCommPort.LogCommsEnable(true);
+                            return true;
+                        }
+
+                        // Not the right response, close the port and move onto the next one.
+                        DisconnectActiveCommPort(acpCommPort);
+                    }
                 }
+
                 return false;
             }
             catch (Exception ex)
@@ -509,9 +652,57 @@ namespace AcpFirmwareUpdater
 
         private bool GetFirmwareVersionFromBoard(IAcpCommPort acpCommPort, int boardAddress, out string firmwareVersion)
         {
+            firmwareVersion = string.Empty;
+
+            for (var attempt = 1; attempt <= FirmwareVersionReadAttempts; attempt++)
+            {
+                DrainPendingResponses(acpCommPort);
+
+                var result = GetFirmwareVersion(acpCommPort, boardAddress, out var receivedVersion);
+                if (result == AcpResultCode.Success && IsFirmwareVersionText(receivedVersion))
+                {
+                    firmwareVersion = receivedVersion;
+                    return true;
+                }
+
+                if (result == AcpResultCode.Success)
+                {
+                    log($"Warning: Ignored non-version reply '{receivedVersion}' while reading firmware version.");
+                }
+
+                Thread.Sleep(ResponseDrainDelayMs);
+            }
+
+            return false;
+        }
+
+
+        private static void DrainPendingResponses(IAcpCommPort acpCommPort)
+        {
             acpCommPort.FlushResponses();
             acpCommPort.FlushNotifications();
-            return GetFirmwareVersion(acpCommPort, boardAddress, out firmwareVersion) == AcpResultCode.Success;
+            Thread.Sleep(ResponseDrainDelayMs);
+            acpCommPort.FlushResponses();
+            acpCommPort.FlushNotifications();
+        }
+
+
+        private static bool IsFirmwareVersionText(string firmwareVersion)
+        {
+            return !string.IsNullOrWhiteSpace(firmwareVersion) &&
+                Regex.IsMatch(firmwareVersion.Trim(), @"^\d{1,3}([.,]\d{1,3}){1,3}$");
+        }
+
+
+        private static bool VersionsMatch(string expectedVersion, string actualVersion)
+        {
+            return string.Equals(NormalizeVersion(expectedVersion), NormalizeVersion(actualVersion), StringComparison.OrdinalIgnoreCase);
+        }
+
+
+        private static string NormalizeVersion(string version)
+        {
+            return version.Trim().Replace(',', '.');
         }
 
 
@@ -707,6 +898,12 @@ namespace AcpFirmwareUpdater
             {
                 return arrCommPorts;
             }
+        }
+
+
+        internal static string[] GetAvailableCommPortNames()
+        {
+            return GetCommPortNames();
         }
 
 
