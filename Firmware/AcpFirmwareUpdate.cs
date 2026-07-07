@@ -31,8 +31,7 @@ namespace AcpFirmwareUpdater
         private const int FirmwareVersionReadAttempts = 4;
         private const int ResponseDrainDelayMs = 120;
         private const long ProgrammingPacketBytes = 64;
-        private const int PmbAddress = 0x41;
-        private const int PmuAddress = 0xA1;
+        private readonly Func<int, string> describeBoardAddress;
         private readonly Action<string> log;
         private readonly object portLock = new();
         private readonly Action<int, string> progress;
@@ -44,15 +43,23 @@ namespace AcpFirmwareUpdater
 
         internal bool WasCancelled { get; private set; }
 
+        internal int? LastDetectedBoardAddress { get; private set; }
+
+        internal string? LastDetectedCommPort { get; private set; }
+
         /**
          * @brief Creates the firmware updater.
          * @param log Function used for debug text.
          * @param progress Function used for progress percentage and status text.
          */
-        internal AcpFirmwareUpdate(Action<string>? log = null, Action<int, string>? progress = null)
+        internal AcpFirmwareUpdate(
+            Action<string>? log = null,
+            Action<int, string>? progress = null,
+            Func<int, string>? describeBoardAddress = null)
         {
             this.log = log ?? Console.WriteLine;
             this.progress = progress ?? ((_, _) => { });
+            this.describeBoardAddress = describeBoardAddress ?? FormatBoardAddress;
         }
 
         /**
@@ -67,11 +74,15 @@ namespace AcpFirmwareUpdater
          * @brief Runs the full firmware update sequence.
          * @param firmwareFilename Firmware file path.
          * @param boardAddress ACP board address selected by the user.
-         * @param watchdogInterval Watchdog kick interval in milliseconds.
          * @param cancellationToken Token used by the UI cancel button.
          * @return True if the board reports the new firmware version after reboot.
          */
-        internal bool UpdateFirmware(string firmwareFilename, int boardAddress, int watchdogInterval, string? commPortName = null, CancellationToken cancellationToken = default)
+        internal bool UpdateFirmware(
+            string firmwareFilename,
+            int boardAddress,
+            string? commPortName = null,
+            string? preferredAutoCommPortName = null,
+            CancellationToken cancellationToken = default)
         {
             IAcpCommPort acpCommPort;
             string fileVersion;
@@ -79,6 +90,8 @@ namespace AcpFirmwareUpdater
             string boardAddressInHex = FormatBoardAddress(boardAddress);
 
             WasCancelled = false;
+            LastDetectedBoardAddress = null;
+            LastDetectedCommPort = null;
             cancellationLogged = false;
             ReportProgress(0, "Checking firmware file");
 
@@ -113,7 +126,7 @@ namespace AcpFirmwareUpdater
 
             log("Preparing communication scan.");
             ReportProgress(12, "Searching for board");
-            if (!DetectBoard(boardAddress, commPortName, cancellationToken, out acpCommPort))
+            if (!DetectBoard(boardAddress, commPortName, preferredAutoCommPortName, cancellationToken, out acpCommPort))
             {
                 if (WasCancelled)
                 {
@@ -132,12 +145,6 @@ namespace AcpFirmwareUpdater
 
                 log($"Board detected at address {boardAddressInHex}");
                 ReportProgress(22, "Board detected");
-
-                // Disable CAN-BUS power to avoid the ping-pong issue if the update is aimed @ PMB
-                if (boardAddress == PmbAddress)
-                {
-                    DisableCanBusPowerSupplies(boardAddress, PmbAddress, acpCommPort);
-                }
 
                 ReportProgress(28, "Rebooting board");
                 if (!RebootBoard(acpCommPort, boardAddress, cancellationToken))
@@ -186,7 +193,7 @@ namespace AcpFirmwareUpdater
                     return false;
                 }
 
-                if (!ApplyFirmwareUpdate(acpCommPort, boardAddress, watchdogInterval, firmwareFileSize, cancellationToken))
+                if (!ApplyFirmwareUpdate(acpCommPort, boardAddress, firmwareFileSize, cancellationToken))
                 {
                     return false;
                 }
@@ -263,10 +270,9 @@ namespace AcpFirmwareUpdater
             return AcpFramework.FirmwareUpdateInitialise(firmwareFilename) == AcpResultCode.Success;
         }
 
-        private bool ApplyFirmwareUpdate(IAcpCommPort acpCommPort, int boardAddress, int watchdogInterval, long firmwareFileSize, CancellationToken cancellationToken)
+        private bool ApplyFirmwareUpdate(IAcpCommPort acpCommPort, int boardAddress, long firmwareFileSize, CancellationToken cancellationToken)
         {
             var programmingTimer = new PollingTimer(programmingTimeout);
-            var watchdogKickTimer = new PollingTimer(watchdogInterval);
             AcpResultCode? lastResultCode = null;
             var lastProgrammingPercent = -1;
             long writtenBytes = 0;
@@ -282,10 +288,6 @@ namespace AcpFirmwareUpdater
                 {
                     return false;
                 }
-
-                // Kick the RDM/RPi watchdog to prevent a reboot
-                if (watchdogInterval > 0 && watchdogKickTimer.Expired())
-                    KickWatchdog(acpCommPort);
 
                 // Service firmware update task
                 var acpResultCode = FirmwareUpdateTask(acpCommPort, boardAddress);
@@ -559,15 +561,13 @@ namespace AcpFirmwareUpdater
             return -1;
         }
 
-        private bool DetectBoard(int boardAddress, string? commPortName, CancellationToken cancellationToken, out IAcpCommPort acpCommPort)
+        private bool DetectBoard(int boardAddress, string? commPortName, string? preferredAutoCommPortName, CancellationToken cancellationToken, out IAcpCommPort acpCommPort)
         {
             acpCommPort = null;
 
             try
             {
-                var commPorts = string.IsNullOrWhiteSpace(commPortName)
-                    ? GetCommPortNames()
-                    : new[] { commPortName.Trim() };
+                var commPorts = GetCommPortScanOrder(commPortName, preferredAutoCommPortName);
 
                 log($"Scanning {commPorts.Length} communication port(s).");
 
@@ -625,10 +625,15 @@ namespace AcpFirmwareUpdater
                                 return false;
                             }
 
-                            log($"Board at {FormatBoardAddress(boardAddress)}, detected on: {commPort}");
+                            LastDetectedBoardAddress = boardAddress;
+                            LastDetectedCommPort = commPort;
+                            log($"{commPort}: found {describeBoardAddress(boardAddress)}.");
+                            log($"Board at {describeBoardAddress(boardAddress)}, detected on: {commPort}");
                             acpCommPort.LogCommsEnable(true);
                             return true;
                         }
+
+                        log($"{commPort}: no response from {describeBoardAddress(boardAddress)}.");
 
                         // Not the right response, close the port and move onto the next one.
                         DisconnectActiveCommPort(acpCommPort);
@@ -647,6 +652,27 @@ namespace AcpFirmwareUpdater
                 log($"Error: DetectBoard - {ex.Message}");
                 return false;
             }
+        }
+
+
+        private static string[] GetCommPortScanOrder(string? commPortName, string? preferredAutoCommPortName)
+        {
+            if (!string.IsNullOrWhiteSpace(commPortName))
+            {
+                return [commPortName.Trim()];
+            }
+
+            var orderedPorts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(preferredAutoCommPortName))
+            {
+                orderedPorts.Add(preferredAutoCommPortName.Trim());
+            }
+
+            orderedPorts.AddRange(GetCommPortNames());
+            return orderedPorts
+                .Where(port => !string.IsNullOrWhiteSpace(port))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
 
@@ -721,7 +747,9 @@ namespace AcpFirmwareUpdater
                 return true;
             }
 
-            log($"Error: Detected board {FormatBoardAddress(detectedAddress)} on {commPort}, but selected target is {FormatBoardAddress(expectedAddress)}.");
+            LastDetectedBoardAddress = detectedAddress;
+            LastDetectedCommPort = commPort;
+            log($"Compatibility warning: selected target is {describeBoardAddress(expectedAddress)}, but board found on {commPort} is {describeBoardAddress(detectedAddress)}.");
             return false;
         }
 
@@ -827,30 +855,6 @@ namespace AcpFirmwareUpdater
             return $"0x{boardAddress:X2}";
         }
 
-
-
-        /**
-         * @brief Queries PMU/PMB watchdog values to stop the host from rebooting.
-         */
-        private void KickWatchdog(IAcpCommPort acpCommPort)
-        {
-            if (RuntimeInformation.ProcessArchitecture == Architecture.Arm)
-            {
-                // Waferlite
-                AcpPMU.GetRpiWatchdogPeriod(acpCommPort, PmuAddress, out _, 0, 10);
-            }
-            else
-            {
-                // DS75/D48
-                AcpPMB.GetRdmPcWatchdogPeriod(acpCommPort, PmbAddress, out _, 0, 10);
-
-                // Waferlite V2
-                AcpWaferPMB.GetRdmPcWatchdogPeriod(acpCommPort, PmuAddress, out _, 0, 10);
-            }
-        }
-
-
-
         /**
          * @brief Creates the ACP communication object for a serial port or CAN socket.
          */
@@ -904,51 +908,6 @@ namespace AcpFirmwareUpdater
         internal static string[] GetAvailableCommPortNames()
         {
             return GetCommPortNames();
-        }
-
-
-
-        /**
-         * @brief Disables power supplies for a given board address.
-         * 
-         * @param boardAddress The address of the board.
-         * @param pmbAddress The address of the PMB.
-         * @param acpCommPort The ACP communication port.
-         */
-        private void DisableCanBusPowerSupplies(int boardAddress, int pmbAddress, IAcpCommPort acpCommPort)
-        {
-            if (boardAddress != pmbAddress)
-            {
-                return;
-            }
-            // Disabling CAN-BUS1 Power
-            DisableCanBusPowerSupply(acpCommPort, boardAddress, AcpPMB.PowerSupplies.CanBus1);
-
-            // Disabling CAN-BUS2 Power
-            DisableCanBusPowerSupply(acpCommPort, boardAddress, AcpPMB.PowerSupplies.CanBus2);
-        }
-
-        /**
-         * @brief Disables a specific power supply for a given board address.
-         * 
-         * @param acpCommPort The ACP communication port.
-         * @param boardAddress The address of the board.
-         * @param supply The power supply to disable.
-         */
-        private void DisableCanBusPowerSupply(IAcpCommPort acpCommPort, int boardAddress, AcpPMB.PowerSupplies supply)
-        {
-            try
-            {
-                var result = AcpPMB.SetPowerSupplyOutputState(acpCommPort, boardAddress, supply, false);
-                var successMsg = $"Disabling PMB({FormatBoardAddress(boardAddress)}) CAN-BUS power {supply} successful.";
-                var failureMsg = $"Disabling PMB({FormatBoardAddress(boardAddress)}) CAN-BUS power {supply} failed.";
-
-                log(result == AcpResultCode.Success ? successMsg : failureMsg);
-            }
-            catch (Exception ex)
-            {
-                log($"Failed to disable PMB({FormatBoardAddress(boardAddress)}) CAN-BUS power {supply}: {ex.Message}");
-            }
         }
 
     }

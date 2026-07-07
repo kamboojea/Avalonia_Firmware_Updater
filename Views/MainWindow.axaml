@@ -339,54 +339,45 @@
                         <ComboBox x:Name="ComPortComboBox"
                                   SelectionChanged="ComPortComboBox_SelectionChanged"
                                   DropDownOpened="ComPortComboBox_DropDownOpened" />
-
-                        <TextBlock Classes="label" Text="Watchdog interval (seconds)" />
-                        <NumericUpDown x:Name="WatchdogNumericUpDown"
-                                       Minimum="0"
-                                       Maximum="3600"
-                                       Increment="1"
-                                       Value="0"
-                                       ValueChanged="WatchdogNumericUpDown_ValueChanged" />
-                        <TextBlock Text="0 disables watchdog kicks. Use a non-zero interval only when the target hardware needs periodic keep-alive messages during long updates."
-                                   Foreground="#69736D"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Margin="2,5,0,0" />
                     </StackPanel>
 
                     <Border Grid.Row="1"
-                            Margin="0,12,0,12"
+                            Margin="0,10,0,10"
                             Background="#F4F7FA"
                             BorderBrush="#E3E9E6"
                             BorderThickness="1"
                             CornerRadius="8"
-                            Padding="14"
+                            Padding="12"
                             ClipToBounds="True">
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="4">
                             <TextBlock Text="Selected target"
                                        Foreground="#69736D"
+                                       FontSize="12"
                                        FontWeight="SemiBold" />
                             <TextBlock x:Name="SelectedTargetText"
                                        Text="BROADCAST #0x00"
                                        Foreground="#17211C"
-                                       FontSize="19"
+                                       FontSize="18"
                                        FontWeight="SemiBold" />
                             <TextBlock x:Name="PreflightSummaryText"
-                                       Text="Firmware: No firmware selected&#x0a;Target: EDB #0xB1&#x0a;Port: Auto find | Watchdog disabled"
+                                       Text="Firmware: No firmware selected"
                                        Foreground="#44504A"
                                        FontSize="12"
-                                       TextWrapping="Wrap" />
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap" />
                             <TextBlock x:Name="CompatibilitySummaryText"
                                        Text="Compatibility check will run before update."
                                        Foreground="#69736D"
                                        FontSize="12"
                                        FontWeight="SemiBold"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="Wrap"
+                                       MaxHeight="34" />
                             <TextBlock x:Name="ResultSummaryText"
                                        Text="No update has run yet."
                                        Foreground="#69736D"
                                        FontSize="12"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="Wrap"
+                                       MaxHeight="34" />
                         </StackPanel>
                     </Border>
 

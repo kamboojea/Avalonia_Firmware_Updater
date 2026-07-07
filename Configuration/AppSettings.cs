@@ -8,7 +8,7 @@ internal sealed class AppSettings
 
     public string? LastComPort { get; set; }
 
-    public int WatchdogSeconds { get; set; }
+    public string? LastSuccessfulComPort { get; set; }
 
     public bool LogsVisible { get; set; } = true;
 }

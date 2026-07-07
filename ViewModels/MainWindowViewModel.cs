@@ -10,7 +10,6 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     private string? firmwarePath;
     private BoardAddressOption? selectedBoard;
     private string? selectedComPort;
-    private int watchdogSeconds;
     private bool isBusy;
     private bool logsVisible = true;
     private UpdatePhase phase = UpdatePhase.Idle;
@@ -50,18 +49,6 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
         set
         {
             if (SetField(ref selectedComPort, value))
-            {
-                UpdatePreflightSummary();
-            }
-        }
-    }
-
-    public int WatchdogSeconds
-    {
-        get => watchdogSeconds;
-        set
-        {
-            if (SetField(ref watchdogSeconds, Math.Max(0, value)))
             {
                 UpdatePreflightSummary();
             }
@@ -108,7 +95,6 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         FirmwarePath = File.Exists(settings.LastFirmwarePath) ? settings.LastFirmwarePath : null;
         SelectedComPort = string.IsNullOrWhiteSpace(settings.LastComPort) ? null : settings.LastComPort;
-        WatchdogSeconds = Math.Max(0, settings.WatchdogSeconds);
         LogsVisible = settings.LogsVisible;
     }
 
@@ -119,7 +105,6 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
             LastFirmwarePath = FirmwarePath,
             LastBoardAddress = SelectedBoard?.Address ?? 0xB1,
             LastComPort = SelectedComPort,
-            WatchdogSeconds = WatchdogSeconds,
             LogsVisible = LogsVisible
         };
     }
@@ -135,11 +120,7 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
             ? "No firmware selected"
             : Path.GetFileName(FirmwarePath);
         var sizeText = GetFirmwareSizeText();
-        var targetText = SelectedBoard is null ? "No target selected" : $"{SelectedBoard.DisplayName} {SelectedBoard.Hex}";
-        var portText = string.IsNullOrWhiteSpace(SelectedComPort) ? "Auto find" : SelectedComPort;
-        var watchdogText = WatchdogSeconds > 0 ? $"{WatchdogSeconds}s watchdog" : "Watchdog disabled";
-
-        PreflightSummary = $"Firmware: {firmwareName}{sizeText}\nTarget: {targetText}\nPort: {portText} | {watchdogText}";
+        PreflightSummary = $"Firmware: {firmwareName}{sizeText}";
         RefreshCompatibility();
     }
 

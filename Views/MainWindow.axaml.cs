@@ -34,7 +34,6 @@ public partial class MainWindow : Window
     private const int DefaultBoardAddress = 0xB1;
     private const int MaxCommLogLinesPerRead = 200;
     private const int MaxLogLines = 700;
-    private const int MaxWatchdogSeconds = 3600;
     private const double DrivenGearMeshPhaseDegrees = 15;
     private const double DrivenGearToothCount = 12;
     private const double GearDriveStepDegrees = 7;
@@ -185,13 +184,6 @@ public partial class MainWindow : Window
         RefreshComPorts();
     }
 
-    private void WatchdogNumericUpDown_ValueChanged(object? sender, NumericUpDownValueChangedEventArgs e)
-    {
-        viewModel.WatchdogSeconds = GetWatchdogSeconds();
-        SaveCurrentSettings();
-        SyncViewModelToUi();
-    }
-
     private async void StartButton_Click(object? sender, RoutedEventArgs e)
     {
         if (updateRunning)
@@ -228,14 +220,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        var watchdogSeconds = GetWatchdogSeconds();
-        var watchdogMilliseconds = watchdogSeconds * 1000;
         var selectedComPort = GetSelectedComPort();
         var cancellationTokenSource = new CancellationTokenSource();
         viewModel.FirmwarePath = firmwarePath;
         viewModel.SelectedBoard = boardAddress;
         viewModel.SelectedComPort = selectedComPort;
-        viewModel.WatchdogSeconds = watchdogSeconds;
         viewModel.ResultSummary = "Update is running.";
         viewModel.Phase = UpdatePhase.Preflight;
         SaveCurrentSettings();
@@ -245,6 +234,8 @@ public partial class MainWindow : Window
         SetBusy(true);
         SetStatus(AppStatus.Running, "Updating");
         SetProgress(0, "Starting update");
+        AppendRunBanner(boardAddress);
+        AppendCommLogRunBanner(boardAddress);
         AppendLog("Pre-flight summary:");
         AppendLog(viewModel.PreflightSummary);
         if (viewModel.CompatibilitySummary.StartsWith("Compatibility warning:", StringComparison.OrdinalIgnoreCase))
@@ -256,19 +247,17 @@ public partial class MainWindow : Window
         AppendLog(selectedComPort is not null
             ? $"Communication port: {selectedComPort}"
             : "Communication port: auto find");
-        AppendLog(watchdogSeconds > 0
-            ? $"Watchdog interval: {watchdogSeconds}s"
-            : "Watchdog interval: disabled");
 
         var succeeded = false;
         updateCancelled = false;
         updateCancellationSource = cancellationTokenSource;
-        runningUpdater = new AcpFirmwareUpdate(AppendLog, ReportProgress);
+        runningUpdater = new AcpFirmwareUpdate(AppendLog, ReportProgress, DescribeBoardAddress);
 
         try
         {
-            succeeded = await Task.Run(() => RunFirmwareUpdate(firmwarePath, boardAddress.Address, watchdogMilliseconds, selectedComPort, cancellationTokenSource.Token));
+            succeeded = await Task.Run(() => RunFirmwareUpdate(firmwarePath, boardAddress.Address, selectedComPort, cancellationTokenSource.Token));
             updateCancelled = updateCancelled || cancellationTokenSource.IsCancellationRequested || runningUpdater.WasCancelled;
+            SaveSuccessfulComPort(runningUpdater.LastDetectedCommPort);
         }
         catch (Exception ex)
         {
@@ -394,17 +383,73 @@ public partial class MainWindow : Window
      * @brief Runs the firmware update on a worker thread.
      * @param firmwarePath Valid firmware file path.
      * @param boardAddress Selected ACP board address.
-     * @param watchdogMilliseconds Watchdog interval in milliseconds.
      * @return True when the update completes and verifies.
      */
-    private bool RunFirmwareUpdate(string firmwarePath, int boardAddress, int watchdogMilliseconds, string? commPortName, CancellationToken cancellationToken)
+    private bool RunFirmwareUpdate(string firmwarePath, int boardAddress, string? commPortName, CancellationToken cancellationToken)
     {
         if (runningUpdater is null)
         {
             return false;
         }
 
-        return runningUpdater.UpdateFirmware(firmwarePath, boardAddress, watchdogMilliseconds, commPortName, cancellationToken);
+        var preferredAutoCommPortName = commPortName is null
+            ? AppSettingsStore.Load().LastSuccessfulComPort
+            : null;
+
+        return runningUpdater.UpdateFirmware(
+            firmwarePath,
+            boardAddress,
+            commPortName,
+            preferredAutoCommPortName,
+            cancellationToken);
+    }
+
+    private void AppendRunBanner(BoardAddressOption boardAddress)
+    {
+        const string bannerLine = "//++++++++++++++++++++++++++++++++++++++++++++++++++";
+        var title = $"//                                   Update Board = {boardAddress.DisplayName}";
+
+        AppendLog(bannerLine);
+        AppendLog(title);
+        AppendLog(bannerLine);
+    }
+
+    private void AppendCommLogRunBanner(BoardAddressOption boardAddress)
+    {
+        const string bannerLine = "//++++++++++++++++++++++++++++++++++++++++++++++++++";
+        var title = $"//                                   Update Board = {boardAddress.DisplayName}";
+
+        AppendCommLog(bannerLine);
+        AppendCommLog(title);
+        AppendCommLog(bannerLine);
+    }
+
+    private void SaveSuccessfulComPort(string? commPortName)
+    {
+        if (string.IsNullOrWhiteSpace(commPortName))
+        {
+            return;
+        }
+
+        var settings = viewModel.CreateSettings();
+        settings.LastSuccessfulComPort = commPortName;
+
+        try
+        {
+            AppSettingsStore.Save(settings);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to save successful COM port: {ex.Message}");
+        }
+    }
+
+    private string DescribeBoardAddress(int address)
+    {
+        var match = boardAddresses.FirstOrDefault(boardAddress => boardAddress.Address == address);
+        return match is null
+            ? $"0x{address:X2}"
+            : $"{match.DisplayName} 0x{address:X2}";
     }
 
     private void ApplyLoadedSettingsToControls()
@@ -414,7 +459,6 @@ public partial class MainWindow : Window
             FirmwarePathTextBox.Text = viewModel.FirmwarePath;
         }
 
-        WatchdogNumericUpDown.Value = viewModel.WatchdogSeconds;
         logsVisible = viewModel.LogsVisible;
 
         if (!string.IsNullOrWhiteSpace(viewModel.SelectedComPort))
@@ -439,12 +483,13 @@ public partial class MainWindow : Window
         viewModel.FirmwarePath = FirmwarePathTextBox.Text?.Trim();
         viewModel.SelectedBoard = GetSelectedBoardAddress();
         viewModel.SelectedComPort = GetSelectedComPort();
-        viewModel.WatchdogSeconds = GetWatchdogSeconds();
         viewModel.LogsVisible = logsVisible;
 
         try
         {
-            AppSettingsStore.Save(viewModel.CreateSettings());
+            var settings = viewModel.CreateSettings();
+            settings.LastSuccessfulComPort = AppSettingsStore.Load().LastSuccessfulComPort;
+            AppSettingsStore.Save(settings);
         }
         catch (Exception ex)
         {
@@ -456,6 +501,7 @@ public partial class MainWindow : Window
     {
         PreflightSummaryText.Text = viewModel.PreflightSummary;
         CompatibilitySummaryText.Text = viewModel.CompatibilitySummary;
+        CompatibilitySummaryText.IsVisible = !viewModel.CompatibilitySummary.StartsWith("Compatibility check", StringComparison.OrdinalIgnoreCase);
         CompatibilitySummaryText.Foreground = viewModel.CompatibilitySummary.StartsWith("Compatibility warning:", StringComparison.OrdinalIgnoreCase)
             ? Brush.Parse("#B86B00")
             : Brush.Parse("#69736D");
@@ -614,7 +660,6 @@ public partial class MainWindow : Window
         BrowseButton.IsEnabled = !isBusy;
         BoardAddressComboBox.IsEnabled = !isBusy;
         ComPortComboBox.IsEnabled = !isBusy;
-        WatchdogNumericUpDown.IsEnabled = !isBusy;
         SetProgressAnimation(isBusy);
 
         if (!isBusy)
@@ -900,23 +945,6 @@ public partial class MainWindow : Window
             2 => bothLogText.ToString(),
             _ => localLogText.ToString()
         };
-    }
-
-    private int GetWatchdogSeconds()
-    {
-        var seconds = WatchdogNumericUpDown.Value ?? 0;
-
-        if (seconds <= 0)
-        {
-            return 0;
-        }
-
-        if (seconds > MaxWatchdogSeconds)
-        {
-            return MaxWatchdogSeconds;
-        }
-
-        return (int)seconds;
     }
 
     private static string FormatElapsed(TimeSpan elapsed)
