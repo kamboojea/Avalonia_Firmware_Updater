@@ -1,6 +1,18 @@
 # Revision Notes
 
 ---
+v0.0.2 - 07/07/2026 - AR
+- Added LocalLogs, CommLogs, and Both log views with per-update run banners.
+- Added manual COM port selection and improved Auto find to try the last successful COM port first.
+- Improved firmware update progress reporting so programming progress is based on actual transfer progress.
+- Added editable board-address configuration from LocalAppData, seeded from the bundled board-addresses.json.
+- Added selected-target summary, firmware compatibility warning, saved settings, and log bundle export.
+- Improved final firmware-version verification by rejecting stale non-version replies before comparing versions.
+- Improved board detection reliability with short port-settle and retry handling while keeping scan behavior fast.
+- Removed watchdog commands from the bootloader update path to avoid extra ACP traffic during firmware transfer.
+- Added Windows asInvoker manifest so the updater does not request administrator privileges.
+
+---
 v0.0.1 - 03/07/2026 - AR
 - OTA method update
 - Requires firmware with an MCU bootloader to perform the update
