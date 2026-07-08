@@ -175,6 +175,7 @@ namespace AcpFirmwareUpdater
                     return false;
                 }
                 log($"Board currently using firmware version v{boardVersion}");
+                var previousBoardVersion = boardVersion;
 
 
                 if (VersionsMatch(fileVersion, boardVersion))
@@ -234,6 +235,7 @@ namespace AcpFirmwareUpdater
                 }
 
                 log($"Board at {boardAddressInHex} successfully updated to v{fileVersion}");
+                AppendFinishBanner(boardAddress, previousBoardVersion, boardVersion, firmwareFilename, firmwareFileSize);
                 ReportProgress(100, "Update complete");
                 return true;
             }
@@ -456,6 +458,58 @@ namespace AcpFirmwareUpdater
             return FirmwareImageField?.GetValue(null) is byte[] firmwareImage
                 ? firmwareImage.Length
                 : 0;
+        }
+
+
+        private void AppendFinishBanner(int boardAddress, string previousVersion, string updatedVersion, string firmwareFilename, long firmwareFileSize)
+        {
+            const string bannerLine = "//=============================================";
+            var firmwareCrc = TryGetLoadedFirmwareCrc32(out var crc32)
+                ? $"0x{crc32:X8}"
+                : "unavailable";
+
+            log(bannerLine);
+            log($"// {describeBoardAddress(boardAddress)} V{NormalizeVersion(updatedVersion)}");
+            log($"// Date = {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            log($"// Previous = V{NormalizeVersion(previousVersion)}");
+            log($"// Firmware = {Path.GetFileName(firmwareFilename)} ({FormatBytes(firmwareFileSize)})");
+            log($"// CRC = {firmwareCrc}");
+            log("// Result = Update complete and version verified");
+            log(bannerLine);
+        }
+
+
+        private static bool TryGetLoadedFirmwareCrc32(out uint crc32)
+        {
+            crc32 = 0;
+
+            if (FirmwareImageField?.GetValue(null) is not byte[] firmwareImage || firmwareImage.Length == 0)
+            {
+                return false;
+            }
+
+            crc32 = CalculateCrc32(firmwareImage);
+            return true;
+        }
+
+
+        private static uint CalculateCrc32(byte[] data)
+        {
+            var crc = 0xFFFFFFFFu;
+
+            foreach (var value in data)
+            {
+                crc ^= value;
+
+                for (var bit = 0; bit < 8; bit++)
+                {
+                    crc = (crc & 1) != 0
+                        ? (crc >> 1) ^ 0xEDB88320u
+                        : crc >> 1;
+                }
+            }
+
+            return ~crc;
         }
 
 
