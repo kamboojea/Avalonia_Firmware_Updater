@@ -46,7 +46,10 @@ internal static class BoardAddressStore
         new("ACP_ADDRESS_EDB", "0xB1"),
     ];
 
-    public static string ConfigPath => Path.Combine(AppContext.BaseDirectory, FileName);
+    public static string ConfigPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "firmware.acp.ota-flasher.desktop",
+        FileName);
 
     /**
      * @brief Loads board addresses from JSON, or creates the default file if it is missing.
@@ -59,7 +62,7 @@ internal static class BoardAddressStore
 
         if (!File.Exists(path))
         {
-            WriteDefaultFile(path, log);
+            SeedEditableFile(path, log);
             return BuildDefaults();
         }
 
@@ -180,7 +183,7 @@ internal static class BoardAddressStore
             && address is >= 0 and <= 0xFF;
     }
 
-    private static void WriteDefaultFile(string path, Action<string> log)
+    private static void SeedEditableFile(string path, Action<string> log)
     {
         try
         {
@@ -190,9 +193,18 @@ internal static class BoardAddressStore
                 Directory.CreateDirectory(directory);
             }
 
-            var json = JsonSerializer.Serialize(DefaultDefinitions, JsonOptions);
-            File.WriteAllText(path, json);
-            log($"Warning: {FileName} was missing, so a default editable file was created.");
+            var bundledPath = Path.Combine(AppContext.BaseDirectory, FileName);
+            if (File.Exists(bundledPath))
+            {
+                File.Copy(bundledPath, path, overwrite: false);
+            }
+            else
+            {
+                var json = JsonSerializer.Serialize(DefaultDefinitions, JsonOptions);
+                File.WriteAllText(path, json);
+            }
+
+            log($"Warning: {FileName} was missing, so a default editable file was created at {path}.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

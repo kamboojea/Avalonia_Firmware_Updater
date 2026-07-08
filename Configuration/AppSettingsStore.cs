@@ -13,7 +13,7 @@ internal static class AppSettingsStore
 
     public static string SettingsPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "AcpFirmwareUpdater",
+        "firmware.acp.ota-flasher.desktop",
         "settings.json");
 
     public static AppSettings Load()

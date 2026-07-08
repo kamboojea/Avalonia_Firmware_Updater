@@ -4,6 +4,9 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);CS8622;CS8625</NoWarn>
+    <AssemblyName>firmware.acp.ota-flasher.desktop</AssemblyName>
+    <Product>firmware.acp.ota-flasher.desktop</Product>
+    <Description>Desktop ACP OTA firmware flasher</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\Images\FirmwareUpdaterIcon.ico</ApplicationIcon>
     <Version>0.0.1</Version>

@@ -545,7 +545,7 @@ public partial class MainWindow : Window
     {
         var exportDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "AcpFirmwareUpdater",
+            "firmware.acp.ota-flasher.desktop",
             "LogExports");
         Directory.CreateDirectory(exportDirectory);
 
@@ -568,7 +568,7 @@ public partial class MainWindow : Window
     private string CreateLogBundleSummary()
     {
         var builder = new StringBuilder();
-        builder.AppendLine("ACP Firmware Updater log bundle");
+        builder.AppendLine("firmware.acp.ota-flasher.desktop log bundle");
         builder.AppendLine($"Created: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         builder.AppendLine();
         builder.AppendLine("Pre-flight");

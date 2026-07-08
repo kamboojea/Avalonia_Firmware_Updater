@@ -1,6 +1,11 @@
 # Revision Notes
 
 ---
+v0.0.3 - 08/07/2026 - AR
+- Renamed the desktop application identity to firmware.acp.ota-flasher.desktop to match the repository name.
+- Updated app metadata, Windows manifest identity, visible window title, local settings folder, log export title, and documentation.
+
+---
 v0.0.2 - 07/07/2026 - AR
 - Added LocalLogs, CommLogs, and Both log views with per-update run banners.
 - Added manual COM port selection and improved Auto find to try the last successful COM port first.

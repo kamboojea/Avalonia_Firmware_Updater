@@ -4,7 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         x:Class="AvaloniaFirmwareUpdater.MainWindow"
-        Title="ACP Firmware Updater"
+        Title="firmware.acp.ota-flasher.desktop"
         Icon="/Assets/Images/FirmwareUpdaterIcon.ico"
         Width="1120"
         Height="740"
@@ -212,7 +212,7 @@
                         Height="58"
                         CornerRadius="8"
                         Background="#ECEFF3">
-                    <Image Source="avares://AvaloniaFirmwareUpdater/Assets/Images/FirmwareUpdaterIcon.png"
+                    <Image Source="avares://firmware.acp.ota-flasher.desktop/Assets/Images/FirmwareUpdaterIcon.png"
                            Width="44"
                            Height="44"
                            Stretch="Uniform"
@@ -221,13 +221,13 @@
                 </Border>
 
                 <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
-                    <TextBlock Classes="title" Text="ACP Firmware Updater" />
-                    <TextBlock Classes="subtitle" Text="OTA firmware update over CAN" />
+                    <TextBlock Classes="title" Text="firmware.acp.ota-flasher.desktop" />
+                    <TextBlock Classes="subtitle" Text="ACP OTA firmware flasher over CAN" />
                 </StackPanel>
 
                 <Grid Grid.Column="2" ColumnDefinitions="Auto,Auto" ColumnSpacing="16" VerticalAlignment="Center">
                     <Image Grid.Column="0"
-                           Source="avares://AvaloniaFirmwareUpdater/Assets/Images/BauerMediaOutdoorTechnic.png"
+                           Source="avares://firmware.acp.ota-flasher.desktop/Assets/Images/BauerMediaOutdoorTechnic.png"
                            Width="300"
                            MaxHeight="64"
                            Stretch="Uniform"
