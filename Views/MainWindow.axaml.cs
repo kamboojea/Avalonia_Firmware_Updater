@@ -253,8 +253,9 @@ public partial class MainWindow : Window
         SetBusy(true);
         SetStatus(AppStatus.Running, "Updating");
         SetProgress(0, "Starting update");
-        AppendRunBanner(boardAddress);
-        AppendCommLogRunBanner(boardAddress);
+        var runStartedAt = DateTime.Now;
+        AppendRunBanner(boardAddress, firmwarePath, selectedComPort, runStartedAt);
+        AppendCommLogRunBanner(boardAddress, firmwarePath, selectedComPort, runStartedAt);
         AppendLog("Pre-flight summary:");
         AppendLog(viewModel.PreflightSummary);
         if (viewModel.CompatibilitySummary.StartsWith("Compatibility warning:", StringComparison.OrdinalIgnoreCase))
@@ -423,24 +424,37 @@ public partial class MainWindow : Window
             cancellationToken);
     }
 
-    private void AppendRunBanner(BoardAddressOption boardAddress)
+    private void AppendRunBanner(BoardAddressOption boardAddress, string firmwarePath, string? selectedComPort, DateTime runStartedAt)
     {
         const string bannerLine = "//++++++++++++++++++++++++++++++++++++++++++++++++++";
         var title = $"//                                   Update Board = {boardAddress.DisplayName}";
 
         AppendLog(bannerLine);
         AppendLog(title);
+        AppendLog($"//                                   Date = {runStartedAt:yyyy-MM-dd HH:mm:ss}");
+        AppendLog($"//                                   Target = {boardAddress.DisplayName} {boardAddress.Hex}");
+        AppendLog($"//                                   Firmware = {Path.GetFileName(firmwarePath)}");
+        AppendLog($"//                                   Port = {FormatPortForBanner(selectedComPort)}");
         AppendLog(bannerLine);
     }
 
-    private void AppendCommLogRunBanner(BoardAddressOption boardAddress)
+    private void AppendCommLogRunBanner(BoardAddressOption boardAddress, string firmwarePath, string? selectedComPort, DateTime runStartedAt)
     {
         const string bannerLine = "//++++++++++++++++++++++++++++++++++++++++++++++++++";
         var title = $"//                                   Update Board = {boardAddress.DisplayName}";
 
         AppendCommLog(bannerLine);
         AppendCommLog(title);
+        AppendCommLog($"//                                   Date = {runStartedAt:yyyy-MM-dd HH:mm:ss}");
+        AppendCommLog($"//                                   Target = {boardAddress.DisplayName} {boardAddress.Hex}");
+        AppendCommLog($"//                                   Firmware = {Path.GetFileName(firmwarePath)}");
+        AppendCommLog($"//                                   Port = {FormatPortForBanner(selectedComPort)}");
         AppendCommLog(bannerLine);
+    }
+
+    private static string FormatPortForBanner(string? selectedComPort)
+    {
+        return string.IsNullOrWhiteSpace(selectedComPort) ? "Auto find" : selectedComPort;
     }
 
     private void SaveSuccessfulComPort(string? commPortName)
